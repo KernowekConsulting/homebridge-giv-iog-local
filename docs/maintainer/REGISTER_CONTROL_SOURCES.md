@@ -13,6 +13,23 @@ References retrieved 18 October 2026 at pinned commits:
 
 GivEnergy core commands explicitly reset both charge-slot endpoints to zero; the register model marks the core and second time pairs write-safe. The dewet22 command module maps ten charge/discharge slot endpoints, documents endpoint reset, and defines pause mode/timing setters. GivHome restricts CE/AC and ED/Hybrid to two slots and CH to its ten-slot namespace; it requires complete valid readback before mutation.
 
-This capability authorises time endpoints only. It does not promote engineering limits or HR242 to writable targets. Existing CE acknowledgement, master control gate, queue, clock checks, uncertain-write reconciliation and final verification still apply.
+This capability authorises time endpoints only. It does not promote engineering limits or HR242 to writable targets. In 4.1.2, fresh model/firmware/serial recognition replaces the CE engineering acknowledgement. The master control gate, explicit opt-out, queue, clock checks, uncertain-write reconciliation and final verification still apply.
 
 See [control lifecycle](CONTROL_LIFECYCLE.md) and [validation scope](VALIDATION_BETA4.md).
+
+## Independent capabilities in 4.1.2
+
+Sources reviewed 4 November 2026:
+
+- [dewet22 model identities and firmware resolution](https://github.com/dewet22/givenergy-modbus/blob/832678b4d0ffa71e0dcee31ff888bb332b4b6aee/givenergy_modbus/model/inverter.py).
+- [dewet22 slot layouts](https://github.com/dewet22/givenergy-modbus/blob/832678b4d0ffa71e0dcee31ff888bb332b4b6aee/givenergy_modbus/model/slot_map.py).
+- [dewet22 capability and write-surface manifest](https://github.com/dewet22/givenergy-modbus/blob/832678b4d0ffa71e0dcee31ff888bb332b4b6aee/givenergy_modbus/model/manifest.py).
+- [GivEnergy AC firmware history](https://kb.givenergy.cloud/article.php?id=23): pause introduced in D202-A202.
+
+Known single-phase AC model codes 3001 and 3002 share two core slots regardless of battery capacity. AC pause mode is separately gated at firmware 202 or later; pause timing is not assumed. The project CE firmware-205 dump and firmware-212 report supply local evidence. The latter shows HR318 write/readback but failed pause-time and extended-slot verification.
+
+The ED2001/firmware915 dump supplies a two-slot hybrid example without pause evidence. Gen-3 hybrid extended slots follow the upstream ARM >302 rule (firmware century 3), not a blanket numeric >302 rule that would misclassify firmware915. CH8001/firmware616 supplies an extended-slot AIO example with pause-bank evidence.
+
+HR111/112 remain the established project command-power route. HR313/314 are represented separately as additional AC limits; this release adds no writes to them and makes no new claim about live rate control on other hardware. Presence of that bank, pause support and extended-slot support do not imply one another.
+
+The recognition layer distinguishes 81xx/83xx extended single-phase models, three-phase, EMS and Gateway, but does not enable their controls in this patch. Identity/model conflicts and unrecognised codes are refused. Existing supported single-phase controls are checked before action acquisition and recovery writes.

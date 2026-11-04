@@ -34,7 +34,18 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
     && readiness?.reviewedOn === '2026-10-21' && readiness?.channel === 'stable'
     && readiness?.fieldInstallationOperational === true && readiness?.resourceBudgetsClaimed === false
     && readiness?.automaticSolarPlanningEnabled === false && optionalFoundation;
-  return { allowed: Boolean(approvedBeta || fieldObservedStable), hardwareQualified: false };
+  // 4.1.2 is an explicitly authorised, simulation-gated control patch. Do not
+  // relabel it as field-observed or extend this exception to another version.
+  const simulation = record.simulationValidation;
+  const simulatedStable = !allowBeta && record.status === 'simulation-validated' && pkg.version === '4.1.2'
+    && readiness?.version === pkg.version && readiness?.authorisedBy === 'project owner'
+    && readiness?.authorisedOn === '2026-11-04' && readiness?.condition === 'simulation-passes' && readiness?.channel === 'stable'
+    && readiness?.scope === 'ac-coupled-confirmations' && readiness?.resourceBudgetsClaimed === false
+    && readiness?.automaticSolarPlanningEnabled === false && readiness?.physicalControlValidationClaimed === false
+    && simulation?.sourcePassed === true && simulation?.packedPassed === true
+    && simulation?.nativeHapPassed === true && simulation?.networkIsolationPassed === true
+    && simulation?.bothAcModelsPassed === true && optionalFoundation;
+  return { allowed: Boolean(approvedBeta || fieldObservedStable || simulatedStable), hardwareQualified: false };
 }
 
 function main() {
@@ -52,11 +63,13 @@ function main() {
     schema: read('config.schema.json'), foundation: require('../lib/solar-observation').emptyModel({}), runtimeSha256 },
   process.argv.includes('--beta-publication'));
   if (!decision.allowed) {
-    console.error('BLOCKED: matching hardware qualification, the recorded beta exception or matching field-observed stable readiness is required.');
+    console.error('BLOCKED: matching hardware qualification or a version-scoped release validation record is required.');
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : pkg.version === '4.1.1'
+    : pkg.version === '4.1.2'
+      ? 'PASS simulation-validated 4.1.2 control patch; physical validation and formal resource budgets are not claimed.'
+      : pkg.version === '4.1.1'
       ? 'PASS field-observed 4.1.1 stable readiness; formal paired resource budgets are not claimed.'
       : 'PASS owner-authorised beta.10 publication; formal resource budgets remain unmeasured.');
 }

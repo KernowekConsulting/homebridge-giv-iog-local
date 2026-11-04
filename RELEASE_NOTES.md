@@ -1,11 +1,7 @@
-# GivHome 4.1.1 — Clearer release history
+# GivHome 4.1.2 — Simpler AC-coupled confirmations
 
-A simpler way to see what’s changed.
+Supported single-phase AC-coupled inverters no longer need a separate engineering confirmation. GivHome checks the inverter model and available controls automatically, while preserving existing settings when each action ends.
 
-The main changelog now lists stable releases, with each release bringing together the improvements from its beta cycle. Earlier beta notes remain available in the GitHub prereleases and tags.
+Choose **Charge towards the IOG target** to charge during smart slots, or a pause option for the corresponding pause behaviour. Existing explicit control opt-outs remain respected.
 
-This update includes the cleaned changelog with the installed plugin. Battery controls and behaviour are unchanged from 4.1.0.
-
-For Emergency Stop, Solar-Aware Cheap Overnight and the other additions in 4.1, see the [4.1.0 release notes](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases/tag/v4.1.0).
-
-**Full Changelog comparison:** [v4.1.0...v4.1.1](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.1.0...v4.1.1).
+[Changes since 4.1.1](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.1.1...v4.1.2) · [Full Changelog](CHANGELOG.md)

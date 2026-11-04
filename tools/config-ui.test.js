@@ -22,8 +22,11 @@ function fields(nodes, model, visibleOnly = false) {
 }
 const visible = model => fields(schema.form, model, true).map(n => n.key);
 
-test('Config presentation preserves all published defaults, keys, types, limits and enum values', () => {
-  const hash = crypto.createHash('sha256').update(JSON.stringify(runtimeContract(schema.schema))).digest('hex');
+test('Config preserves the published contract except the deliberate CE automatic-control default', () => {
+  assert.equal(schema.schema.properties.enableCeAcCoupledLiveWrites.default, true);
+  const contract = structuredClone(schema.schema);
+  contract.properties.enableCeAcCoupledLiveWrites.default = false;
+  const hash = crypto.createHash('sha256').update(JSON.stringify(runtimeContract(contract))).digest('hex');
   assert.equal(hash, expectedContract);
   const fieldHash = crypto.createHash('sha256').update(JSON.stringify([...new Set(fields(schema.form, {}).map(n => n.key))].sort())).digest('hex');
   assert.equal(fieldHash, 'a507f158f6fa9be50528855a86d6bc37d3145d3446e58442e94a41eaa79e4b7c', 'only deliberately retired settings may disappear');

@@ -274,14 +274,23 @@ test('automatic recovery publishes the cleared HomeKit fault without another Hom
   assert.equal(await on.handleGetRequest(),false);
 });
 
-test('native switches respect master, unsupported model, CE acknowledgement and removal', t => {
-  for (const overrides of [{enableApplianceControl:false},{inverterSerial:'GW00000000'},{inverterSerial:'CE2225G298'}]) {
+test('native switches respect master, unsupported model, explicit CE disable and removal', t => {
+  for (const overrides of [{enableApplianceControl:false},{inverterSerial:'GW00000000'},{inverterSerial:'CE2225G298',enableCeAcCoupledLiveWrites:false}]) {
     const {platform:p,registered}=makePlatform(t,storage(t),{enableEmergencyStopTile:true,...overrides});
     p.ensureBetaControlAccessories(); assert.equal(registered.length,0);
   }
   const {platform:p,registered}=makePlatform(t,storage(t),{enableEmergencyStopTile:true});
   p.ensureBetaControlAccessories(); assert.equal(registered.length,1);
   p.config.enableEmergencyStopTile=false; p.ensureBetaControlAccessories(); assert.equal(p.accessories.length,0);
+});
+
+test('native CE controls are exposed without the engineering token and exposure sends no commands', t => {
+  const {platform:p,registered}=makePlatform(t,storage(t),{inverterSerial:'CE2237G099',enableEmergencyStopTile:true});
+  p.readHoldingRegisters=()=>assert.fail('exposure must not read');
+  p.writeDirectRegister=()=>assert.fail('exposure must not write');
+  p.ensureBetaControlAccessories();
+  assert.equal(registered.length,1);
+  assert.equal(p.chargeTargetTileEnabled(),true);
 });
 
 test('solar native toggle saves first, rejects storage failure and leaves prior preference', async t => {
@@ -303,6 +312,7 @@ test('native idle Emergency Stop returns Off without disabling an armed future s
   const hour = new Date().getHours();
   const start = (hour + 2) % 24, end = (hour + 3) % 24;
   state[94] = start * 100; state[95] = end * 100;
+  p.readControlIdentity = async () => ({ serial: p.inverterSerial, modelCode: 0x8001, armFirmware: 616 });
   p.readHoldingRegisters = async (r, n) => {
     const d = new Date();
     const clock = { 35: d.getFullYear() - 2000, 36: d.getMonth() + 1, 37: d.getDate(), 38: d.getHours(), 39: d.getMinutes(), 40: d.getSeconds() };

@@ -4,6 +4,10 @@ This changelog lists stable GivHome v4 releases. Each release brings together th
 
 [Release notes for 4.1.1](RELEASE_NOTES.md) describe the current update. Older entries record the behaviour and validation at the time of each release.
 
+## 4.1.2 — 4 November 2026
+
+Simplified confirmations for supported single-phase AC-coupled inverters. Model, firmware and control checks replace the separate engineering confirmation; charging and pause choices remain independent. Existing explicit control opt-outs are respected.
+
 ## 4.1.1 — Clearer release history (22 October 2026)
 
 - Simplified the main changelog to show stable releases, with the beta-cycle improvements consolidated under their final releases.

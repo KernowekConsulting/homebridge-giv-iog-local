@@ -1,28 +1,29 @@
 {
-  "version": "4.1.1",
-  "status": "field-observed",
-  "runtimeSha256": "57ad4a755d14f5fa5f758d277fc2b86e828f5f1dd9fa57ca0c2c748b992c3519",
+  "version": "4.1.2",
+  "status": "simulation-validated",
+  "runtimeSha256": "99023fcd9193c5ccf5d6ee7e1eb974cd36c11f760372c0bd865e1ea8bfbfdfea",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_4.1.1.md",
-  "reason": "Documentation-only patch to the accepted 4.1.0 runtime. Only release identity changes in runtime files; field evidence and control behaviour are retained. Formal paired resource budgets are not claimed.",
-  "fieldObservation": {
-    "hardware": "owner's Raspberry Pi Homebridge installation",
-    "operational": true,
-    "overnightChargeAndIogCleanupObserved": true,
-    "localLearningStorageFaults": 0,
-    "automaticSolarPlanningEnabled": false,
-    "source": "docs/maintainer/VALIDATION_4.1.0.md"
-  },
+  "evidence": "docs/maintainer/VALIDATION_4.1.2.md",
+  "reason": "Conditional owner-authorised stable patch after source and packed simulations. No new physical inverter validation or formal paired resource budgets are claimed.",
   "stableReadiness": {
-    "version": "4.1.1",
-    "reviewedBy": "project owner",
-    "reviewedOn": "2026-10-21",
+    "version": "4.1.2",
     "channel": "stable",
-    "fieldInstallationOperational": true,
+    "scope": "ac-coupled-confirmations",
     "resourceBudgetsClaimed": false,
-    "automaticSolarPlanningEnabled": false
+    "automaticSolarPlanningEnabled": false,
+    "physicalControlValidationClaimed": false,
+    "authorisedBy": "project owner",
+    "authorisedOn": "2026-11-04",
+    "condition": "simulation-passes"
+  },
+  "simulationValidation": {
+    "sourcePassed": true,
+    "packedPassed": true,
+    "nativeHapPassed": true,
+    "networkIsolationPassed": true,
+    "bothAcModelsPassed": true
   }
 }

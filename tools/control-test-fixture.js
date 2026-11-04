@@ -21,7 +21,7 @@ function fixture(t, { serial = 'CH2344G083', now = '2026-10-18T08:30:00+01:00', 
     Object.assign(p, { name: 'control-test', inverterSerial: serial, inverterHost: 'no-network.invalid', config: options,
       chargeTargetIdentity: `control-test:${serial}`, configuredChargeTarget: 100, getStoragePath: () => directory,
       api: { hap: { uuid: { generate: s => crypto.createHash('sha256').update(s).digest('hex') } } },
-      applianceControl: { ...ac, masterGateSatisfied: true, features: { ...ac.features, chargeTiles: true, exportTiles: true, pauseTiles: true, ceAcCoupledLiveWrites: true } },
+      applianceControl: { ...ac, masterGateSatisfied: true, features: { ...ac.features, chargeTiles: true, exportTiles: true, pauseTiles: true, ceAcCoupledLiveWrites: ac.features.ceAcCoupledLiveWrites } },
       health: { state: 'online' }, latestModel: { socPercent: 40, batteryDischargePowerW: 0, loadPowerW: 500, pvPowerW: 0 }, octopusState: { dispatches: [] },
       log: Object.fromEntries(['info', 'warn', 'error', 'debug'].map(k => [k, (...args) => logs.push(args)])),
       applianceSnapshots: new Map(), applianceCommandTimers: new Map(), applianceCommandServices: new Map(), applianceCommandTruthCache: new Map(),
@@ -29,6 +29,7 @@ function fixture(t, { serial = 'CH2344G083', now = '2026-10-18T08:30:00+01:00', 
       commandTransportSequence: 0, commandQueueDepth: 0, commandPollHoldUntilMs: 0, commandQueueTail: Promise.resolve(),
       withManualChargeTransportGate: async (_label, fn) => fn(), enterQueuedCommandTransportGate: async (_label, fn) => fn(),
       setManualChargeHomeKitState() {}, setApplianceCommandState() {}, setPauseTileStatesFromPrestate() {}, invalidateCommandTruthSnapshot() {},
+      readControlIdentity: async () => ({ serial, modelCode: Object.hasOwn(state, 0) ? state[0] : serial.startsWith('CE') ? 0x3001 : serial.startsWith('CH') ? 0x8001 : 0x2001, armFirmware: Object.hasOwn(state, 21) ? state[21] : serial.startsWith('CE') ? 212 : serial.startsWith('CH') ? 616 : 915 }),
       readHoldingRegisters: async (r, n, label) => {
         reads.push({ r, n, label });
         const d = new Date(Date.now() + clockOffset);

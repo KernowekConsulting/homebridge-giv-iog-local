@@ -383,16 +383,16 @@
         "description": "Sampling interval for local Eve-style energy history totals."
       },
       "enableCeAcCoupledLiveWrites": {
-        "title": "Enable CE/AC-coupled live writes",
+        "title": "Allow supported CE/AC controls (legacy configuration)",
         "type": "boolean",
-        "default": false,
-        "description": "Additional profile gate. CE/AC-coupled systems use core-window preserve/restore and must not use CH/AIO slot-8 assumptions."
+        "default": true,
+        "description": "Supported single-phase AC-coupled controls use fresh model, identity and register checks. Explicit false disables CE controls. No engineering acknowledgement is required."
       },
       "ceAcCoupledLiveWriteAcknowledgement": {
         "title": "CE/AC live-write acknowledgement",
         "type": "string",
         "default": "",
-        "description": "Required value: ENABLE_STAGE11_CE_AC_COUPLED_LIVE_WRITES."
+        "description": "Obsolete compatibility field; supported CE/AC controls do not require this token."
       },
       "modbusUnitAddress": {
         "title": "Modbus unit address (engineering override only)",

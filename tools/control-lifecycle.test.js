@@ -294,10 +294,10 @@ test('saved CE pause ownership still requires mode readback when the tile is rem
   f.p.initialiseBetaControls(); assert.equal(f.p.controlProfile.pause, true);
   await f.p.requestEmergencyStop(); assert.equal(f.registers[318], 0); assert.equal(f.p.currentControlOwner('pause'), null);
 });
-test('CE charge and pause acquisition retain the explicit live-write acknowledgement', async t => {
+test('CE charge and pause acquisition respect explicit control disable', async t => {
   const f = fixture(t, { serial: 'CE2225G298' }); f.p.applianceControl.features.ceAcCoupledLiveWrites = false;
-  await assert.rejects(f.p.startTimedChargeCommand({ minutes: 30 }), /acknowledgement/);
-  await assert.rejects(f.p.startManualPauseCommand({ displayName: 'Pause Dis', pauseValue: 2 }), /acknowledgement/);
+  await assert.rejects(f.p.startTimedChargeCommand({ minutes: 30 }), /explicitly disabled/);
+  await assert.rejects(f.p.startManualPauseCommand({ displayName: 'Pause Dis', pauseValue: 2 }), /explicitly disabled/);
   assert.deepEqual(f.writes, []);
 });
 for (const family of ['charge', 'export']) for (const fault of ['before', 'after']) for (let at=1; at<=7; at++) test(`armed future ${family}: interrupted start ${fault} write ${at} restores eligibility`, async t => {

@@ -24,6 +24,8 @@ const { DirectLocalReadOnlyClient } = require('./lib/direct-modbus-client');
 const { createInternalFlightRecorderLogger } = require('./lib/internal-flight-recorder');
 const { decodeInputRegisters0To60 } = require('./lib/telemetry-decoder');
 const { classifySerialPrefix } = require('./lib/profile-detector');
+const { recogniseControlCapabilities } = require('./lib/control-capabilities');
+const { controlProfile: recognisedControlProfile } = require('./lib/control-state');
 const {
   capabilityStateSummaryLine,
   renderBlockLogLine,
@@ -131,8 +133,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.1.1',
-      stage: 'GivHome 4.1.1'
+      version: '4.1.2',
+      stage: 'GivHome 4.1.2'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -2039,6 +2041,7 @@ class GivHomeModbusPlatform {
   }
 
   async startManualPauseCommand(tile) {
+    await this.verifyControlSupport('pause');
     const pauseModeValue = Number(tile.pauseValue || 0);
     if (![1, 2, 3].includes(pauseModeValue)) throw new Error(`pause start refused: unsupported mode for ${tile.displayName}`);
     const original = await this.readPausePrestate();
@@ -2504,7 +2507,49 @@ class GivHomeModbusPlatform {
       }
     }));
     const result = await client.readHoldingRegisters(start, count);
+    if (result.inverterSerial !== this.inverterSerial) {
+      throw new Error('Control readback identity does not match the configured inverter');
+    }
     return result.values;
+  }
+
+  async readControlIdentity() {
+    const client = new DirectLocalReadOnlyClient(this.manualChargeClientOptions());
+    const model = await client.readHoldingRegisters(0, 1);
+    const firmware = await client.readHoldingRegisters(21, 1);
+    if (model.inverterSerial !== this.inverterSerial || firmware.inverterSerial !== this.inverterSerial) {
+      throw new Error('Control identity does not match the configured inverter; no writes sent');
+    }
+    return { serial: model.inverterSerial, modelCode: model.values?.length === 1 ? model.values[0] : null,
+      armFirmware: firmware.values?.length === 1 ? firmware.values[0] : null };
+  }
+
+  async verifyControlSupport(family, { cleanup = false } = {}) {
+    if (!cleanup && !this.applianceControl.masterGateSatisfied) throw new Error('Appliance control is disabled');
+    if (!cleanup && this.isCeAcCoupledProfile() && !this.applianceControl.features.ceAcCoupledLiveWrites) {
+      throw new Error('CE/AC control is explicitly disabled in configuration');
+    }
+    const identity = await this.readControlIdentity();
+    const capabilities = recogniseControlCapabilities(identity);
+    if (identity.serial !== this.inverterSerial || !capabilities.commandSupported) {
+      throw new Error('Control requires matching inverter identity, supported model and firmware; no writes sent');
+    }
+    const profile = recognisedControlProfile(this.inverterSerial, capabilities);
+    // Old journals may hold a pause acquired by an earlier release. Permit only
+    // its verified cleanup; optional pause support is never created by a UI flag.
+    const legacyPause = Boolean(this.currentControlOwner('pause') || this.controlLedger?.deferred.some(item => item.family === 'pause'));
+    if (legacyPause) profile.pause = true;
+    if (family === 'pause' && !capabilities.pause.mode && !(cleanup && legacyPause)) {
+      throw new Error('Pause control is not supported by this model/firmware; charging remains available');
+    }
+    this.controlCapabilities = capabilities;
+    this.controlProfile = profile;
+    if (this.controlLedger && JSON.stringify(this.controlLedger.identity) !== JSON.stringify(identity)) {
+      this.controlLedger.identity = identity; this.saveControlLedger();
+    }
+    this.log.info('GivHome control preflight: family=%s model=%s layout=%s slots=%s pauseMode=%s pauseTimes=%s power=HR%s/HR%s additionalAcLimitWrites=no identity=matched',
+      family, identity.modelCode.toString(16), capabilities.slots.layout, capabilities.slots.count,
+      capabilities.pause.mode, capabilities.pause.times, capabilities.power.charge, capabilities.power.discharge);
   }
 
   logGracefulContinuityReadbackFailure(label, event) {
@@ -2538,6 +2583,7 @@ class GivHomeModbusPlatform {
   }
 
   async startIogPauseProtectionCommand(options = {}) {
+    await this.verifyControlSupport('pause');
     const mode = String(options.mode || this.applianceControl.iogHomeBatteryProtectionMode || 'pauseDischarge');
     const modeText = this.applianceControl.iogHomeBatteryProtectionModeText || mode;
     const pauseModeValue = Number(this.applianceControl.iogHomeBatteryProtectionPauseValue || 0);
@@ -2725,7 +2771,7 @@ class GivHomeModbusPlatform {
   async startTimedExportCommand(tileOrPlan, options = {}) {
     const profileKind = this.isChAioProfile() ? 'ch-aio' : 'ce-ac';
     if (this.isCeAcCoupledProfile() && !this.applianceControl.features.ceAcCoupledLiveWrites) {
-      throw new Error('CE/AC-coupled export refused: GivHome command CE/AC live-write acknowledgement is not satisfied');
+      throw new Error('CE/AC control is explicitly disabled in configuration');
     }
     const minutes = Math.max(1, Number(tileOrPlan.minutes || options.minutes || 30));
     const now = options.startDate instanceof Date ? options.startDate : new Date();

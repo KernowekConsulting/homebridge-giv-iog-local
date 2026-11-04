@@ -3,7 +3,7 @@ name: Publish npm
 on:
   push:
     tags:
-      - 'v4.1.1'
+      - 'v4.1.2'
 
 permissions:
   id-token: write
@@ -25,13 +25,13 @@ jobs:
 
       - name: Use validated npm
         run: |
-          npm install --global npm@11.20.0
-          test "$(npm --version)" = "11.20.0"
+          npm install --global npm@11.21.1
+          test "$(npm --version)" = "11.21.1"
 
       - name: Verify release
         run: |
           node tools/verify-observation-qualification.js
-          test "$(node -p 'require("./package.json").version')" = "4.1.1"
+          test "$(node -p 'require("./package.json").version')" = "4.1.2"
           npm ci --ignore-scripts
           for file in index.js lib/*.js tools/*.js; do node --check "$file"; done
           npm test
@@ -41,7 +41,7 @@ jobs:
       - name: Build and verify reviewed package
         run: |
           npm pack
-          echo 'b51fdefe370d058e093a5185c4a879b23abf6239f21102dbdccefa3af7c70fc5  homebridge-giv-iog-local-4.1.1.tgz' | sha256sum --check
+          echo '7e819e767908f3de75c85e4c63919106b09296a9e73cebb03cb79f8fafb043ad  homebridge-giv-iog-local-4.1.2.tgz' | sha256sum --check
 
       - name: Publish with trusted publishing
-        run: npm publish homebridge-giv-iog-local-4.1.1.tgz --access public --tag latest
+        run: npm publish homebridge-giv-iog-local-4.1.2.tgz --access public --tag latest
