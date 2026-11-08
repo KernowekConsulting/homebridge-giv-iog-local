@@ -125,3 +125,22 @@ test('4.1.2 simulation publication is scoped, conditional and never claims physi
   }
   assert.equal(publicationDecision(input,true).allowed,false);
 });
+
+test('4.1.3 simulation publication is scoped, conditional and never claims physical validation', () => {
+  const { publicationDecision }=require('./verify-observation-qualification');
+  const input={pkg:{version:'4.1.3'},runtimeSha256:'reviewed',
+    schema:{schema:{properties:{enableSolarObservation:{default:true},enableEmergencyStopTile:{default:true}}}},
+    foundation:{automaticControl:false,qualified:false},record:{version:'4.1.3',runtimeSha256:'reviewed',
+      status:'simulation-validated',networkIsolationPassed:true,faultAndRetentionPassed:true,evidence:'validation',
+      stableReadiness:{version:'4.1.3',authorisedBy:'project owner',authorisedOn:'2026-11-08',condition:'simulation-passes',channel:'stable',scope:'ce-ac-upgrade-regression',
+        resourceBudgetsClaimed:false,automaticSolarPlanningEnabled:false,physicalControlValidationClaimed:false},
+      simulationValidation:{sourcePassed:true,packedPassed:true,nativeHapPassed:true,networkIsolationPassed:true,bothAcModelsPassed:true}}};
+  assert.deepEqual(publicationDecision(input),{allowed:true,hardwareQualified:false});
+  for(const change of [x=>x.record.simulationValidation.packedPassed=false,
+    x=>x.record.simulationValidation.bothAcModelsPassed=false,x=>x.record.stableReadiness.physicalControlValidationClaimed=true,
+    x=>x.runtimeSha256='changed',x=>x.record.stableReadiness.authorisedOn='2026-11-05',
+    x=>{x.pkg.version=x.record.version=x.record.stableReadiness.version='4.1.4';}]){
+    const altered=structuredClone(input);change(altered);assert.equal(publicationDecision(altered).allowed,false);
+  }
+  assert.equal(publicationDecision(input,true).allowed,false);
+});

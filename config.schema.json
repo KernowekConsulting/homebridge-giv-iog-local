@@ -383,10 +383,10 @@
         "description": "Sampling interval for local Eve-style energy history totals."
       },
       "enableCeAcCoupledLiveWrites": {
-        "title": "Allow supported CE/AC controls (legacy configuration)",
+        "title": "Retired CE/AC engineering setting",
         "type": "boolean",
         "default": true,
-        "description": "Supported single-phase AC-coupled controls use fresh model, identity and register checks. Explicit false disables CE controls. No engineering acknowledgement is required."
+        "description": "Retired and ignored, including older saved false values. Use the main battery control and individual feature switches. Supported controls require fresh model, identity and register checks."
       },
       "ceAcCoupledLiveWriteAcknowledgement": {
         "title": "CE/AC live-write acknowledgement",
@@ -477,10 +477,10 @@
         "description": "Choose what the home battery does during smart slots. GivHome restores the previous state when protection ends."
       },
       "enableApplianceControl": {
-        "title": "Enable appliance controls",
+        "title": "Enable battery controls",
         "type": "boolean",
         "default": true,
-        "description": "Hidden safe default used by the product appliance-control engine."
+        "description": "Allow the charging, export and pause features you select. Turning this off blocks new actions and Emergency Stop; already-owned actions may still restore their previous settings."
       },
       "applianceControlAcknowledgement": {
         "title": "Appliance control acknowledgement",
@@ -1462,8 +1462,9 @@
       "title": "Apple Home controls",
       "expandable": true,
       "expanded": false,
-      "description": "Choose the extra controls and history you want in Apple Home.",
+      "description": "Enable battery controls, then choose the extra controls and history you want in Apple Home.",
       "items": [
+        "enableApplianceControl",
         "enableTimedChargeTiles",
         "enableTimedExportTiles",
         {

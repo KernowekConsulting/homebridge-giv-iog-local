@@ -19,6 +19,12 @@ If values still do not update, check the Homebridge log for connection or timeou
 
 ## Export or charge controls do not start
 
+For 4.1.3 and later, the retired CE/AC engineering flag and acknowledgement are ignored, including a false value saved by an older version. In **Apple Home controls**, check **Enable battery controls** and the individual feature you intend to use. Turning battery controls off blocks new actions and Emergency Stop; cleanup of already-owned actions remains available. An explicit false takes precedence over the legacy master alias.
+
+Charge 30m starts a timed command. Charge Target saves a percentage preference; changing it alone does not start charging.
+
+A queued or executing command is only an attempt. `responseBytesReceived=yes` means bytes arrived, not a validated protocol acknowledgement. `readback=verified` means the requested register value was read back. Physical charging still needs fresh battery/grid power telemetry; do not blindly repeat a command after an uncertain response.
+
 The plugin is cautious. It may refuse a write if the inverter is already in a conflicting state, if readback fails, or if another export route appears active.
 
 Check the log for phrases such as:

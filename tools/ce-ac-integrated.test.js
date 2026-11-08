@@ -27,9 +27,9 @@ function device(t, config = {}, state = {}) {
 function slot(p) {
   p.octopusState.dispatches = [{ start: new Date('2026-11-03T19:30:00Z'), end: new Date('2026-11-03T21:00:00Z') }];
 }
-test('ordinary feature configuration enables CE without an engineering token; explicit false and master off remain off', () => {
+test('ordinary feature configuration ignores retired engineering flags; master off remains off', () => {
   assert.equal(buildApplianceControlConfig(baseConfig).features.ceAcCoupledLiveWrites, true);
-  assert.equal(buildApplianceControlConfig({ ...baseConfig, enableCeAcCoupledLiveWrites: false }).features.ceAcCoupledLiveWrites, false);
+  assert.equal(buildApplianceControlConfig({ ...baseConfig, enableCeAcCoupledLiveWrites: false }).features.ceAcCoupledLiveWrites, true);
   assert.equal(buildApplianceControlConfig({ ...baseConfig, enableApplianceControl: false }).features.ceAcCoupledLiveWrites, false);
 });
 for (const [mode, value] of [['charge', null], ['pauseDischarge', 2], ['pauseCharge', 1], ['pauseBoth', 3]]) {
@@ -92,10 +92,46 @@ for (const state of [{ 94: 2360 }, { 96: 2 }, { 111: 101 }, { 31: 2360 }, { 318:
     await assert.rejects(command()); assert.deepEqual(f.writes, []);
   });
 }
-test('explicit opt-out blocks both ordinary IOG and Emergency Stop without writes', async t => {
-  const f = device(t, { enableCeAcCoupledLiveWrites: false }); slot(f.p);
-  await assert.rejects(f.p.applyApplianceAutomation(), /explicitly disabled/);
-  await assert.rejects(f.p.requestEmergencyStop(), /explicitly disabled/);
+test('master off blocks acquisition and Emergency Stop even with the retired engineering flag enabled', async t => {
+  const f = device(t, { enableApplianceControl: false, enableCeAcCoupledLiveWrites: true });
+  f.p.applianceControl.masterGateSatisfied = false;
+  await assert.rejects(f.p.startTimedChargeCommand({ minutes: 30 }), /Appliance control is disabled/);
+  await assert.rejects(f.p.requestEmergencyStop(), /not enabled/);
+  slot(f.p); await f.p.applyApplianceAutomation();
+  assert.deepEqual(f.writes, []);
+});
+for (const model of [0x3001, 0x3002]) for (const legacy of [undefined, false, true]) {
+  const config = legacy === undefined ? {} : { enableCeAcCoupledLiveWrites: legacy, ceAcCoupledLiveWriteAcknowledgement: 'obsolete-token' };
+  test(`upgrade regression model=${model.toString(16)} legacy=${legacy}: manual start, restart, stop restore prestate`, async t => {
+    const f = device(t, config, { 0: model }); const before = { ...f.registers };
+    await f.p.startTimedChargeCommand({ kind: 'charge30', displayName: 'Charge 30m', minutes: 30 });
+    assert.equal(f.registers[96], 1); assert.equal(f.registers[94], 2000); assert.equal(f.registers[95], 2030);
+    assert.equal(f.p.currentControlOwner('charge').phase, 'active');
+    const restarted = f.restart();
+    await restarted.cleanupApplianceCommandFamily('charge', 'user stop');
+    assert.deepEqual(f.registers, before);
+    assert.ok(f.writes.some(([r,v]) => r === 96 && v === 1));
+  });
+  test(`upgrade regression model=${model.toString(16)} legacy=${legacy}: IOG start and end restore prestate`, async t => {
+    const f = device(t, { ...config, iogHomeBatteryProtectionMode: 'charge' }, { 0: model }); const before = { ...f.registers }; slot(f.p);
+    await f.p.applyApplianceAutomation();
+    assert.equal(f.p.currentControlOwner('charge')?.phase, 'active');
+    assert.equal(f.registers[94], 2000); assert.equal(f.registers[95], 2100);
+    const restarted = f.restart(); slot(restarted);
+    t.mock.timers.tick(61 * 60000); await restarted.applyApplianceAutomation();
+    assert.equal(restarted.currentControlOwner('charge'), null); assert.deepEqual(f.registers, before);
+  });
+}
+for (const config of [{ enableEvSmartWindowBatteryProtection: false }, { enableOctopusSmartWindows: false }]) {
+  test(`ordinary feature off remains off despite retired false: ${JSON.stringify(config)}`, async t => {
+    const f = device(t, { enableCeAcCoupledLiveWrites: false, ...config }); slot(f.p);
+    await f.p.applyApplianceAutomation(); assert.deepEqual(f.writes, []);
+  });
+}
+test('retired false never bypasses fresh identity rejection', async t => {
+  const f = device(t, { enableCeAcCoupledLiveWrites: false });
+  f.p.readControlIdentity = async () => ({ serial: 'CE2237G099', modelCode: 0x8001, armFirmware: 616 });
+  await assert.rejects(f.p.startTimedChargeCommand({ minutes: 30 }), /matching inverter identity, supported model/);
   assert.deepEqual(f.writes, []);
 });
 test('fresh identity is checked again on acquisition and cleanup', async t => {

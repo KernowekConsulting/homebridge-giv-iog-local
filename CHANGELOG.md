@@ -2,7 +2,14 @@
 
 This changelog lists stable GivHome v4 releases. Each release brings together the improvements developed during its beta cycle. Beta notes remain available in the [GitHub prereleases and tags](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases).
 
-[Release notes for 4.1.1](RELEASE_NOTES.md) describe the current update. Older entries record the behaviour and validation at the time of each release.
+[Release notes for 4.1.3](RELEASE_NOTES.md) describe the current update. Older entries record the behaviour and validation at the time of each release.
+
+## 4.1.3 — Restore AC-coupled charge commands (8 November 2026)
+
+- Retired the obsolete CE/AC engineering flag, including false defaults saved by older settings pages, so selected charge and IOG protection features can run after fresh inverter validation.
+- Preserved the main control switch, feature choices, action ownership, readback checks and restoration safeguards.
+- Clarified that response bytes, verified register settings and observed battery power are separate evidence. Charge 30m remains available; Charge Target remains a preference.
+- Upgrades can resume already-enabled features previously blocked by the retired flag. Use the main control or individual feature switches to keep them disabled.
 
 ## 4.1.2 — 4 November 2026
 

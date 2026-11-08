@@ -34,13 +34,14 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
     && readiness?.reviewedOn === '2026-10-21' && readiness?.channel === 'stable'
     && readiness?.fieldInstallationOperational === true && readiness?.resourceBudgetsClaimed === false
     && readiness?.automaticSolarPlanningEnabled === false && optionalFoundation;
-  // 4.1.2 is an explicitly authorised, simulation-gated control patch. Do not
-  // relabel it as field-observed or extend this exception to another version.
+  // Version-scoped, explicitly authorised control patches. Neither claims field
+  // validation; future versions still require their own reviewed release record.
   const simulation = record.simulationValidation;
-  const simulatedStable = !allowBeta && record.status === 'simulation-validated' && pkg.version === '4.1.2'
+  const patch413 = pkg.version === '4.1.3';
+  const simulatedStable = !allowBeta && record.status === 'simulation-validated' && ['4.1.2', '4.1.3'].includes(pkg.version)
     && readiness?.version === pkg.version && readiness?.authorisedBy === 'project owner'
-    && readiness?.authorisedOn === '2026-11-04' && readiness?.condition === 'simulation-passes' && readiness?.channel === 'stable'
-    && readiness?.scope === 'ac-coupled-confirmations' && readiness?.resourceBudgetsClaimed === false
+    && readiness?.authorisedOn === (patch413 ? '2026-11-08' : '2026-11-04') && readiness?.condition === 'simulation-passes' && readiness?.channel === 'stable'
+    && readiness?.scope === (patch413 ? 'ce-ac-upgrade-regression' : 'ac-coupled-confirmations') && readiness?.resourceBudgetsClaimed === false
     && readiness?.automaticSolarPlanningEnabled === false && readiness?.physicalControlValidationClaimed === false
     && simulation?.sourcePassed === true && simulation?.packedPassed === true
     && simulation?.nativeHapPassed === true && simulation?.networkIsolationPassed === true
@@ -67,8 +68,8 @@ function main() {
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : pkg.version === '4.1.2'
-      ? 'PASS simulation-validated 4.1.2 control patch; physical validation and formal resource budgets are not claimed.'
+    : ['4.1.2', '4.1.3'].includes(pkg.version)
+      ? `PASS simulation-validated ${pkg.version} control patch; physical validation and formal resource budgets are not claimed.`
       : pkg.version === '4.1.1'
       ? 'PASS field-observed 4.1.1 stable readiness; formal paired resource budgets are not claimed.'
       : 'PASS owner-authorised beta.10 publication; formal resource budgets remain unmeasured.');

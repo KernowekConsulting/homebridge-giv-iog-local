@@ -133,8 +133,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.1.2',
-      stage: 'GivHome 4.1.2'
+      version: '4.1.3',
+      stage: 'GivHome 4.1.3'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -196,6 +196,10 @@ class GivHomeModbusPlatform {
     this.maxPvKw = Number.isFinite(this.config.maxPvKw) && this.config.maxPvKw > 0 ? this.config.maxPvKw : null;
     this.solarCalibrationWarned = false;
     this.applianceControl = buildApplianceControlConfig(this.config);
+    if (Object.prototype.hasOwnProperty.call(this.config, 'enableCeAcCoupledLiveWrites')
+      || Object.prototype.hasOwnProperty.call(this.config, 'ceAcCoupledLiveWriteAcknowledgement')) {
+      this.log.warn('GivHome retired CE/AC engineering settings ignored: enabled controls use the main control switch, individual feature choices and fresh inverter validation; no writes sent by migration.');
+    }
     this.configuredChargeTarget = this.applianceControl.targetSoc;
     this.chargeTargetIdentity = `${this.name}:${this.inverterSerial}`;
     this.chargeTargetFile = path.join(this.getStoragePath(), `givhome-charge-target-${this.api.hap.uuid.generate(this.chargeTargetIdentity)}.json`);
@@ -1627,7 +1631,7 @@ class GivHomeModbusPlatform {
     if (readback.values[0] !== value) {
       throw new Error(`${label} post-send readback reconciliation failed: requested=${value} readback=${readback.values[0]} noBlindResend=yes`);
     }
-    this.log.warn('Manual Charge HomeKit Function 06 reconciled: label=%s HR%s=%s responseReceived=%s noBlindResend=yes', label, register, value, writeResponse.responseReceived ? 'yes' : 'no');
+    this.log.warn('Manual Charge HomeKit Function 06 reconciled: label=%s HR%s=%s responseReceived=%s readback=verified physicalFlow=not-verified noBlindResend=yes', label, register, value, writeResponse.responseReceived ? 'yes' : 'no');
   }
 
 
@@ -2633,13 +2637,14 @@ class GivHomeModbusPlatform {
       },
       frame
     });
+    this.log.info('GivHome write response: label=%s HR%s=%s payloadSent=%s responseBytesReceived=%s protocolAcknowledgement=not-validated readback=pending', label, register, value, writeResponse.payloadSent ? 'yes' : 'no', writeResponse.responseReceived ? 'yes' : 'no');
     if (!writeResponse.responseReceived) {
       this.log.warn('GivHome command Function 06 acknowledgement uncertain: label=%s payloadSent=%s postSendError=%s readbackReconciliation=required', label, writeResponse.payloadSent ? 'yes' : 'no', writeResponse.postSendError || 'none');
     }
     const valueBack = (await this.readHoldingRegisters(register, 1, label))[0];
     if (valueBack !== value) throw new Error(`${label} readback failed: requested=${value} readback=${valueBack} noBlindResend=yes`);
     this.invalidateCommandTruthSnapshot(`${label} HR${register}`);
-    this.log.warn('GivHome command Function 06 reconciled: label=%s HR%s=%s responseReceived=%s noBlindResend=yes', label, register, value, writeResponse.responseReceived ? 'yes' : 'no');
+    this.log.warn('GivHome command Function 06 reconciled: label=%s HR%s=%s responseReceived=%s readback=verified physicalFlow=not-verified noBlindResend=yes', label, register, value, writeResponse.responseReceived ? 'yes' : 'no');
   }
 
 

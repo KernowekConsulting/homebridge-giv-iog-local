@@ -54,6 +54,17 @@
     const changed = [];
     const mark = (key, didChange) => { if (didChange) changed.push(key); };
 
+    mark('enableApplianceControl', copyAlias(config, 'enableApplianceControl', ['enableStage11ApplianceControl']));
+
+    // Retire both engineering settings, including defaults saved by older forms.
+    // Normal master and individual feature choices remain unchanged.
+    for (const key of ['enableCeAcCoupledLiveWrites', 'ceAcCoupledLiveWriteAcknowledgement']) {
+      if (Object.prototype.hasOwnProperty.call(config, key)) {
+        delete config[key];
+        changed.push(key);
+      }
+    }
+
     // Existing installations without a name have always run as "GivHome Modbus".
     // Materialising that fallback preserves accessory UUIDs and state-file identity.
     if (!has(config, 'name')) {

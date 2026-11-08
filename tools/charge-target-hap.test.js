@@ -274,8 +274,8 @@ test('automatic recovery publishes the cleared HomeKit fault without another Hom
   assert.equal(await on.handleGetRequest(),false);
 });
 
-test('native switches respect master, unsupported model, explicit CE disable and removal', t => {
-  for (const overrides of [{enableApplianceControl:false},{inverterSerial:'GW00000000'},{inverterSerial:'CE2225G298',enableCeAcCoupledLiveWrites:false}]) {
+test('native switches respect master, unsupported model and removal', t => {
+  for (const overrides of [{enableApplianceControl:false},{inverterSerial:'GW00000000'}]) {
     const {platform:p,registered}=makePlatform(t,storage(t),{enableEmergencyStopTile:true,...overrides});
     p.ensureBetaControlAccessories(); assert.equal(registered.length,0);
   }
@@ -285,7 +285,7 @@ test('native switches respect master, unsupported model, explicit CE disable and
 });
 
 test('native CE controls are exposed without the engineering token and exposure sends no commands', t => {
-  const {platform:p,registered}=makePlatform(t,storage(t),{inverterSerial:'CE2237G099',enableEmergencyStopTile:true});
+  const {platform:p,registered}=makePlatform(t,storage(t),{inverterSerial:'CE2237G099',enableEmergencyStopTile:true,enableCeAcCoupledLiveWrites:false});
   p.readHoldingRegisters=()=>assert.fail('exposure must not read');
   p.writeDirectRegister=()=>assert.fail('exposure must not write');
   p.ensureBetaControlAccessories();
@@ -380,4 +380,25 @@ test('native Flux tile Off cleans only Flux-owned export and On permits eligible
   p.currentControlOwner = () => ({ source: 'external' });
   await on.handleSetRequest(false);
   assert.equal(cleanups.length, 1);
+});
+
+test('native Charge 30m starts and stops on an upgraded CE config with retired false', async t => {
+  const directory = storage(t);
+  const { platform: p } = makePlatform(t, directory, { inverterSerial: 'CE2237G099', enableTimedChargeTiles: true,
+    enableCheapOvernightCharging: false, enableCeAcCoupledLiveWrites: false });
+  const registers = Object.fromEntries(Array.from({ length: 321 }, (_, r) => [`HR${r}`, 0]));
+  Object.assign(registers, { HR0: 0x3001, HR21: 212, HR27: 1, HR111: 50, HR112: 50, HR116: 80 });
+  const original = { ...registers }, writes = [];
+  require('./attach-control-fixture')(p, registers, directory);
+  p.writeDirectRegister = async (r, v) => { writes.push([r, v]); registers[`HR${r}`] = v; };
+  p.ceAcChargeSlotStatePath = () => path.join(directory, 'ce-memory.json');
+  p.ensureApplianceCommandAccessories();
+  const on = p.applianceCommandServices.get('charge30').getCharacteristic(hap.Characteristic.On);
+  t.after(() => { for (const timer of p.applianceCommandTimers.values()) clearTimeout(timer); });
+  await on.handleSetRequest(true);
+  assert.equal(p.currentControlOwner('charge')?.phase, 'active');
+  assert.equal(registers.HR96, 1); assert.ok(writes.length > 0);
+  await on.handleSetRequest(false);
+  assert.equal(p.currentControlOwner('charge'), null);
+  assert.deepEqual(registers, original);
 });

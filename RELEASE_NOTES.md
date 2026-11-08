@@ -1,7 +1,11 @@
-# GivHome 4.1.2 — Simpler AC-coupled confirmations
+# GivHome 4.1.3 — Restore AC-coupled charging after upgrade
 
-Supported single-phase AC-coupled inverters no longer need a separate engineering confirmation. GivHome checks the inverter model and available controls automatically, while preserving existing settings when each action ends.
+Fixed a configuration regression that could block Charge 30m and Intelligent Octopus Go battery protection on supported AC-coupled inverters. Older saved engineering settings no longer override enabled battery controls. The main control switch, individual feature choices, fresh inverter checks and verified restoration remain in force.
 
-Choose **Charge towards the IOG target** to charge during smart slots, or a pause option for the corresponding pause behaviour. Existing explicit control opt-outs remain respected.
+Charge 30m remains a timed command. Charge Target saves a percentage preference and does not start charging.
 
-[Changes since 4.1.1](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.1.1...v4.1.2) · [Full Changelog](CHANGELOG.md)
+Write logs now distinguish response bytes from verified register readback. Physical battery flow still requires fresh telemetry.
+
+Validated with isolated inverter simulations and native HomeKit tests; no new live inverter testing is claimed. Upgrading can resume already-enabled charging or IOG protection that the obsolete setting previously blocked. To keep controls off, disable the main battery control switch or the relevant feature before upgrading.
+
+[Changes since 4.1.2](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.1.2...v4.1.3) · [Full Changelog](CHANGELOG.md)

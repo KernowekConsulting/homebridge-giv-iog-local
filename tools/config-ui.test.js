@@ -28,7 +28,7 @@ test('Config preserves the published contract except the deliberate CE automatic
   contract.properties.enableCeAcCoupledLiveWrites.default = false;
   const hash = crypto.createHash('sha256').update(JSON.stringify(runtimeContract(contract))).digest('hex');
   assert.equal(hash, expectedContract);
-  const fieldHash = crypto.createHash('sha256').update(JSON.stringify([...new Set(fields(schema.form, {}).map(n => n.key))].sort())).digest('hex');
+  const fieldHash = crypto.createHash('sha256').update(JSON.stringify([...new Set(fields(schema.form, {}).map(n => n.key))].filter(key => key !== 'enableApplianceControl').sort())).digest('hex');
   assert.equal(fieldHash, 'a507f158f6fa9be50528855a86d6bc37d3145d3446e58442e94a41eaa79e4b7c', 'only deliberately retired settings may disappear');
   const known = new Set(Object.keys(schema.schema.properties));
   for (const { key } of fields(schema.form, {})) assert.ok(known.has(key.split(/[.[]/)[0]), `unknown setting ${key}`);
@@ -172,4 +172,23 @@ test('retired automatic settings and inaccessible export comparison are absent',
     'octopusAgileOutgoingMpanAuditDelayHours', 'octopusAgileOutgoingMpanMismatchToleranceKwh',
     'octopusAgileOutgoingSuspendOnMpanMismatch']) assert.equal(Object.hasOwn(schema.schema.properties, key), false);
   assert.equal(JSON.stringify(schema.form).includes('Compare export meter readings'), false);
+});
+
+for (const legacy of [false, true]) test(`settings migration removes retired CE engineering flag=${legacy} without changing normal choices`, () => {
+  const input = { name: 'GivHome', enableCeAcCoupledLiveWrites: legacy, ceAcCoupledLiveWriteAcknowledgement: 'old-token',
+    enableApplianceControl: false, enableTimedChargeTiles: false, enableEvSmartWindowBatteryProtection: false };
+  const result = migrateExistingConfig(input);
+  const config = result.config;
+  assert.equal(Object.hasOwn(config, 'enableCeAcCoupledLiveWrites'), false);
+  assert.equal(Object.hasOwn(config, 'ceAcCoupledLiveWriteAcknowledgement'), false);
+  for (const key of ['enableApplianceControl', 'enableTimedChargeTiles', 'enableEvSmartWindowBatteryProtection']) assert.equal(config[key], false);
+  assert.equal(input.enableCeAcCoupledLiveWrites, legacy, 'migration does not mutate supplied config');
+  assert.deepEqual(migrateExistingConfig(config).config, config, 'idempotent migration');
+});
+
+test('battery control switch is visible and its false overrides the legacy master alias', () => {
+  assert.ok(visible({}).includes('enableApplianceControl'));
+  assert.equal(buildApplianceControlConfig({ enableApplianceControl: false, enableStage11ApplianceControl: true,
+    applianceControlAcknowledgement: 'ENABLE_GIVHOME_APPLIANCE_CONTROL' }).masterGateSatisfied, false);
+  assert.equal(migrateExistingConfig({ enableStage11ApplianceControl: false }).config.enableApplianceControl, false);
 });
