@@ -1,0 +1,15 @@
+{
+  "platform": "GivHomeModbus",
+  "name": "GivHome Marstek Lab",
+  "enableReadOnlyPolling": false,
+  "enableApplianceControl": false,
+  "enableSolarObservation": false,
+  "marstekDevices": [
+    {
+      "id": "garage-venus",
+      "name": "Garage Venus Simulator",
+      "host": "127.0.0.1",
+      "port": 15020
+    }
+  ]
+}

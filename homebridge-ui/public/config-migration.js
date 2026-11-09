@@ -170,6 +170,8 @@
     mark('octopusFluxRunDaysPreset', migrateDays(config, 'octopusFlux', 'octopusFluxDaysToRun'));
     mark('octopusAgileOutgoingRunDaysPreset', migrateDays(config, 'octopusAgileOutgoing', 'octopusAgileOutgoingDaysToRun'));
 
+    if(!has(config,'marstekIntegrationEnabled')&&Array.isArray(config.marstekDevices)&&config.marstekDevices.length){config.marstekIntegrationEnabled=true;changed.push('marstekIntegrationEnabled');}
+    if(Array.isArray(config.marstekDevices))config.marstekDevices=config.marstekDevices.map(d=>{if(d.dischargeLimitW===undefined&&d.maxDischargeW===2500&&d.higherDischargeLimitConfirmed===true){changed.push('marstekDevices');return {...d,dischargeLimitW:2500};}return d;});
     return { config, changed: [...new Set(changed)] };
   }
 

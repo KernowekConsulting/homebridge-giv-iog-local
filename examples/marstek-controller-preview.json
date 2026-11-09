@@ -1,0 +1,16 @@
+{
+  "marstekGatewayHost": "192.168.0.103",
+  "marstekGatewaySerial": "GW2412G068",
+  "marstekControllerMode": "house-support",
+  "marstekReserveSoc": 20,
+  "marstekDevices": [
+    {
+      "id": "garage-venus",
+      "name": "Garage Venus",
+      "host": "192.0.2.50",
+      "maxDischargeW": 800,
+      "maxChargeW": 2500,
+      "higherDischargeLimitConfirmed": false
+    }
+  ]
+}

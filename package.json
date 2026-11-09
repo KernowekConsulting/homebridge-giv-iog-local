@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.1.3",
+  "version": "4.2.0-beta.1",
   "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
@@ -35,14 +35,32 @@
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "scripts": {
-    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js tools/control-lifecycle.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js && node --test tools/config-ui.test.js && npm run test:ce-ac",
-    "verify": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js tools/control-lifecycle.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js && node --test tools/config-ui.test.js && npm run test:ce-ac",
+    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js tools/control-lifecycle.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js && node --test tools/config-ui.test.js && npm run test:ce-ac && npm run test:marstek && npm run test:gateway-meter && npm run test:marstek-ui && npm run test:charging && npm run test:site && npm run test:qualification && npm run test:sim67 && npm run test:household && npm run test:consolidation && node --test tools/responsive.test.js && npm run test:beta && npm run test:commissioning",
+    "verify": "npm test",
     "test:hap": "node --test tools/charge-target-hap.test.js",
     "pack:dry": "npm pack --dry-run",
     "test:observation": "TZ=Europe/London node --test tools/solar-observation.test.js",
     "test:observation:stress": "node --expose-gc tools/solar-observation-stress.js",
-    "prepublishOnly": "node tools/verify-observation-qualification.js && npm test",
-    "test:ce-ac": "TZ=Europe/London node --test tools/ce-ac-integrated.test.js tools/control-capabilities.test.js"
+    "prepublishOnly": "node tools/verify-observation-qualification.js --beta-publication && npm test",
+    "test:ce-ac": "TZ=Europe/London node --test tools/ce-ac-integrated.test.js tools/control-capabilities.test.js",
+    "test:marstek": "node --test tools/marstek.test.js tools/marstek-hap.test.js",
+    "marstek:simulate": "node tools/marstek-simulator.js",
+    "marstek:inspect": "node tools/marstek-inspect.js",
+    "test:gateway-meter": "node --test tools/gateway-meter.test.js",
+    "simulate:gateway-meter": "node tools/gateway-meter-sim.js",
+    "test:marstek-ui": "node --test tools/marstek-ui.test.js",
+    "test:charging": "TZ=Europe/London node --test tools/marstek-charging.test.js",
+    "simulate:charging": "node tools/marstek-charging-sim.js",
+    "test:site": "node --test tools/site-coordinator.test.js",
+    "test:qualification": "node --test tools/qualification.test.js",
+    "replay:gateway": "node tools/gateway-replay.js",
+    "test:sim67": "node --test tools/percentage-journeys.test.js tools/lifecycle-sim.test.js",
+    "simulate:lifecycle": "node tools/lifecycle-sim.js",
+    "test:household": "node --test tools/household-scenarios.test.js",
+    "simulate:household": "node tools/household-scenarios.js",
+    "test:consolidation": "node --test tools/consolidation.test.js",
+    "test:beta": "node --test tools/beta-integration.test.js tools/beta-runtime-journeys.test.js",
+    "test:commissioning": "node --test tools/commissioning.test.js tools/commissioning-ui.test.js"
   },
   "files": [
     "index.js",
@@ -74,7 +92,37 @@
     "tools/attach-control-fixture.js",
     "tools/config-ui.test.js",
     "tools/ce-ac-integrated.test.js",
-    "tools/control-capabilities.test.js"
+    "tools/control-capabilities.test.js",
+    "tools/marstek.test.js",
+    "tools/marstek-hap.test.js",
+    "tools/marstek-simulator.js",
+    "tools/marstek-inspect.js",
+    "examples",
+    "tools/gateway-meter.test.js",
+    "tools/gateway-meter-sim.js",
+    "tools/marstek-ui.test.js",
+    "tools/marstek-charging.test.js",
+    "tools/marstek-charging-sim.js",
+    "tools/gateway-simulator.js",
+    "tools/site-coordinator.test.js",
+    "tools/qualification.test.js",
+    "tools/gateway-replay.js",
+    "tools/fixtures/gateway-real-replay.json",
+    "tools/percentage-journeys.test.js",
+    "tools/lifecycle-sim.test.js",
+    "tools/lifecycle-sim.js",
+    "tools/household-scenarios.js",
+    "tools/household-scenarios.test.js",
+    "tools/consolidation.test.js",
+    "tools/responsive-plant.js",
+    "tools/responsive.test.js",
+    "tools/fixtures/gateway-real-20261106.json",
+    "tools/beta-integration.test.js",
+    "tools/beta-venus-simulator.js",
+    "tools/fixtures/v413-config.schema.json",
+    "tools/beta-runtime-journeys.test.js",
+    "tools/commissioning.test.js",
+    "tools/commissioning-ui.test.js"
   ],
   "displayName": "GivHome",
   "homepage": "https://homebridge.givhome.kernowekconsulting.co.uk",
@@ -91,6 +139,11 @@
     "url": "https://homebridge.givhome.kernowekconsulting.co.uk"
   },
   "dependencies": {
-    "fakegato-history": "^0.6.5"
+    "fakegato-history": "^0.6.5",
+    "@homebridge/plugin-ui-utils": "^2.2.7"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
   }
 }

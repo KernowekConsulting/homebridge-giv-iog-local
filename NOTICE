@@ -5,3 +5,10 @@ Copyright (c) Kernowek Consulting.
 Direct local Modbus architecture, export safety model, Intelligent Octopus Go protection, Flux Export planning and Agile Export planning developed by JayC68 / Kernowek Consulting.
 
 This project is not affiliated with, endorsed by or sponsored by GivEnergy, Octopus Energy, Apple or Homebridge. Product names are used only to describe compatibility.
+
+Marstek Venus E 3.0 monitoring preview
+Register facts informed by ViperRNMC/marstek_venus_modbus (MIT-licensed project)
+and ArthurTimmermans/marstek-maestro hardware notes. The preview's transport,
+monitor and HomeKit binding are independently implemented JavaScript. See
+docs/MARSTEK_MVP.md for source URLs, conflicting references and qualification limits.
+This project is not affiliated with or endorsed by Marstek.

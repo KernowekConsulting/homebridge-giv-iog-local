@@ -1,4 +1,11 @@
-# GivHome for Homebridge
+# GivHome 4.2.0-beta.1 — Marstek Venus edition
+
+Beta Marstek Addon. Not for public use
+
+Start with [Venus beta setup](docs/VENUS_BETA.md). Read the [one-page explainer](docs/GivHome-Marstek-Venus-Interoperability-Progress.pdf).
+
+This build retains the 4.1.3 GivEnergy controls and adds an optional Marstek Integration section at the bottom of settings. Commissioning is built in: the Homebridge settings page checks connections and guides a short 100 W battery test. Physical controls become available after successful checks for the configured device and firmware.
+
 
 GivHome brings compatible GivEnergy battery and inverter systems directly into Apple Home.
 

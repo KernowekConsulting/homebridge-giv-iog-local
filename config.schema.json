@@ -1172,6 +1172,257 @@
         "type": "boolean",
         "default": true,
         "description": "Add an On/Off tile for the enabled function. Off stops GivHome-owned Flux export and prevents further starts; On allows eligible export again. Hiding the tile leaves Flux enabled. After a Homebridge restart, the enabled configuration applies again."
+      },
+      "marstekDevices": {
+        "title": "Marstek Venus E 3.0 batteries (MVP)",
+        "type": "array",
+        "default": [],
+        "maxItems": 4,
+        "description": "Optional local monitoring. No Marstek control or automatic export is enabled.",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "host"
+          ],
+          "properties": {
+            "enabled": {
+              "title": "Enable monitoring",
+              "type": "boolean",
+              "default": true
+            },
+            "id": {
+              "title": "Permanent battery ID",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,48}$",
+              "description": "Choose once, for example garage-venus. Keep this ID when the IP address changes."
+            },
+            "name": {
+              "title": "Apple Home name",
+              "type": "string",
+              "default": "Garage Venus",
+              "maxLength": 48
+            },
+            "host": {
+              "title": "Battery IP address",
+              "type": "string",
+              "description": "Reserve this IP address for your Venus in your router\u2019s DHCP settings so it stays the same."
+            },
+            "port": {
+              "title": "Port",
+              "type": "integer",
+              "default": 502,
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "unitId": {
+              "title": "Modbus unit",
+              "type": "integer",
+              "default": 1,
+              "minimum": 1,
+              "maximum": 247
+            },
+            "pollIntervalSeconds": {
+              "title": "Read interval (seconds)",
+              "type": "integer",
+              "default": 2,
+              "minimum": 1,
+              "maximum": 300,
+              "description": "Direct Modbus read cycle. Start at 2 seconds. Shadow control requires 1\u20135 seconds; timing and hardware load still need qualification."
+            },
+            "staleAfterSeconds": {
+              "title": "Reading expires after (seconds)",
+              "type": "integer",
+              "default": 10,
+              "minimum": 3,
+              "maximum": 900
+            },
+            "timeoutMs": {
+              "title": "Connection timeout (milliseconds)",
+              "type": "integer",
+              "default": 3000,
+              "minimum": 100,
+              "maximum": 10000
+            },
+            "thresholdW": {
+              "title": "Charge / discharge activity threshold (W)",
+              "type": "integer",
+              "default": 50,
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "maxDischargeW": {
+              "title": "Maximum Marstek discharge (W)",
+              "type": "integer",
+              "default": 800,
+              "minimum": 0,
+              "maximum": 2500,
+              "description": "Default 800 W. A higher value must match an already commissioned battery limit and needs the confirmation below. Saving this value does not unlock or modify the battery."
+            },
+            "higherDischargeLimitConfirmed": {
+              "title": "A higher discharge limit is already commissioned on this battery",
+              "type": "boolean",
+              "default": false,
+              "description": "Required for a configured discharge ceiling above 800 W. This records your confirmation; it does not verify or change the device setting."
+            },
+            "maxChargeW": {
+              "title": "Maximum Marstek charging power (W)",
+              "type": "integer",
+              "default": 2500,
+              "minimum": 0,
+              "maximum": 2500,
+              "description": "Separate charging ceiling for simulations. Confirm actual device capability during commissioning; the 800 W output default is not used as a charging specification."
+            },
+            "dischargeLimitW": {
+              "title": "Venus output limit",
+              "type": "integer",
+              "enum": [
+                800,
+                2500
+              ],
+              "enumNames": [
+                "800 W",
+                "2.5 kW"
+              ],
+              "default": 800,
+              "description": "Choose the output limit configured on your Venus. Saving this does not change the battery setting."
+            }
+          }
+        }
+      },
+      "marstekGatewayHost": {
+        "title": "Gateway IP address",
+        "type": "string",
+        "placeholder": "192.168.0.103",
+        "description": "Enter the GivEnergy Gateway IP for household readings. This is separate from the AIO address."
+      },
+      "marstekGatewaySerial": {
+        "title": "Expected Gateway serial number",
+        "type": "string",
+        "pattern": "^GW[A-Za-z0-9]{8}$",
+        "placeholder": "GW2412G068",
+        "description": "Enter the GW serial shown on your Gateway so GivHome can check it has reached the right device."
+      },
+      "marstekControllerMode": {
+        "title": "Household support strategy (simulation)",
+        "type": "string",
+        "default": "residual",
+        "enum": [
+          "residual",
+          "house-support"
+        ],
+        "enumNames": [
+          "Cover remaining grid demand",
+          "Let Marstek support the house before the AIO"
+        ],
+        "description": "Preview planning only. This choice does not enable battery control."
+      },
+      "marstekReserveSoc": {
+        "title": "Marstek minimum battery level (%)",
+        "type": "integer",
+        "default": 20,
+        "minimum": 0,
+        "maximum": 95,
+        "description": "Energy retained in controller simulations. This does not change the battery\u2019s own reserve setting."
+      },
+      "marstekShadowEnabled": {
+        "title": "Run read-only shadow controller",
+        "type": "boolean",
+        "default": false,
+        "description": "Reads Gateway and one Venus and records proposed actions. Sends no battery commands."
+      },
+      "marstekShadowBatteryId": {
+        "title": "Battery to manage",
+        "type": "string",
+        "description": "When adding more than one Venus, enter the permanent ID of the battery GivHome will manage. With one battery, GivHome selects it automatically."
+      },
+      "marstekAcDischargeSign": {
+        "title": "Verified Venus AC power direction",
+        "type": "string",
+        "default": "unqualified",
+        "enum": [
+          "unqualified",
+          "positive",
+          "negative"
+        ],
+        "enumNames": [
+          "Not yet verified",
+          "Positive watts mean discharge",
+          "Negative watts mean discharge"
+        ],
+        "description": "Leave unverified until checked against real charging and discharging. Proposals are held while direction is unverified."
+      },
+      "marstekInstallationTimeZone": {
+        "title": "Installation time zone",
+        "type": "string",
+        "default": "Europe/London",
+        "description": "Used for the overnight clock window, including daylight-saving transitions."
+      },
+      "marstekOvernightEnabled": {
+        "title": "Include Marstek in overnight charging plans",
+        "type": "boolean",
+        "default": true,
+        "description": "Shadow plans use the existing cheap hours and Night Target. Disabling Cheap Overnight above also disables this plan."
+      },
+      "marstekAutomationHold": {
+        "title": "Pause Venus automation",
+        "type": "boolean",
+        "default": false,
+        "description": "Pauses Venus automatic plans and cancels any active combined Charge To or Export To request. Targets stay saved and monitoring continues. Existing GivEnergy schedules are not paused."
+      },
+      "marstekSitePreviewEnabled": {
+        "type": "boolean",
+        "title": "Combined battery target tiles (shadow preview)",
+        "default": false,
+        "description": "Replaces timed tiles with combined SOC and Charge to / Export down to percentage dimmers. Records proposals only; these controls do not charge or export physical batteries."
+      },
+      "marstekSiteImportLimitW": {
+        "type": "integer",
+        "title": "Maximum grid import (W)",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 30000,
+        "description": "Legacy optional import allowance; no longer requested by the Marstek setup. Zero means no additional whole-site import limiter."
+      },
+      "marstekSiteAioCapacityKwh": {
+        "type": "number",
+        "title": "Usable capacity per AIO (kWh)",
+        "default": 13.5,
+        "minimum": 0.1,
+        "maximum": 50
+      },
+      "marstekSiteVenusCapacityKwh": {
+        "type": "number",
+        "title": "Usable Venus capacity (kWh)",
+        "default": 5.12,
+        "minimum": 0.1,
+        "maximum": 50
+      },
+      "marstekSiteAioReserve": {
+        "type": "number",
+        "title": "AIO reserve (%)",
+        "default": 20,
+        "minimum": 0,
+        "maximum": 99
+      },
+      "marstekSiteVenusReserve": {
+        "type": "number",
+        "title": "Venus reserve (%)",
+        "default": 20,
+        "minimum": 0,
+        "maximum": 99
+      },
+      "marstekIntegrationEnabled": {
+        "type": "boolean",
+        "title": "I have a Marstek Venus battery",
+        "default": false,
+        "description": "Optional addition. Leave off to continue using GivHome with your GivEnergy system as usual."
+      },
+      "marstekControlEnabled": {
+        "title": "Enable battery control",
+        "type": "boolean",
+        "default": false,
+        "description": "Runs your selected battery controls after the one-time connection and battery checks below have passed."
       }
     },
     "required": [
@@ -1712,6 +1963,81 @@
                 "octopusAgileOutgoingMinimumExportKwh",
                 "octopusAgileOutgoingMinimumGrossMarginPence",
                 "octopusAgileOutgoingReferenceImportPence"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Marstek Integration",
+      "expandable": true,
+      "expanded": false,
+      "description": "Add a Marstek Venus battery alongside GivHome.",
+      "items": [
+        "marstekIntegrationEnabled",
+        {
+          "type": "div",
+          "condition": {
+            "functionBody": "return model.marstekIntegrationEnabled === true;"
+          },
+          "items": [
+            {
+              "type": "fieldset",
+              "title": "GivEnergy Gateway",
+              "items": [
+                "marstekGatewayHost",
+                "marstekGatewaySerial"
+              ]
+            },
+            {
+              "type": "array",
+              "key": "marstekDevices",
+              "title": "{{ value.name || \"Venus battery\" }}",
+              "items": [
+                "marstekDevices[].enabled",
+                "marstekDevices[].id",
+                "marstekDevices[].name",
+                "marstekDevices[].host",
+                "marstekDevices[].dischargeLimitW",
+                "marstekDevices[].maxChargeW",
+                {
+                  "type": "fieldset",
+                  "title": "Connection and readings",
+                  "expandable": true,
+                  "expanded": false,
+                  "items": [
+                    "marstekDevices[].port",
+                    "marstekDevices[].unitId",
+                    "marstekDevices[].pollIntervalSeconds",
+                    "marstekDevices[].staleAfterSeconds",
+                    "marstekDevices[].timeoutMs",
+                    "marstekDevices[].thresholdW"
+                  ]
+                }
+              ]
+            },
+            "marstekControlEnabled",
+            {
+              "type": "fieldset",
+              "title": "Battery preferences",
+              "expandable": true,
+              "expanded": false,
+              "items": [
+                "marstekOvernightEnabled",
+                "marstekAutomationHold",
+                "marstekSiteAioReserve",
+                "marstekSiteVenusReserve"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "Advanced",
+              "expandable": true,
+              "expanded": false,
+              "items": [
+                "marstekShadowBatteryId"
               ]
             }
           ]

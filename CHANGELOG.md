@@ -1,8 +1,8 @@
 # Changelog
 
-This changelog lists stable GivHome v4 releases. Each release brings together the improvements developed during its beta cycle. Beta notes remain available in the [GitHub prereleases and tags](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases).
+## 4.2.0-beta.1
 
-[Release notes for 4.1.3](RELEASE_NOTES.md) describe the current update. Older entries record the behaviour and validation at the time of each release.
+Beta Marstek Addon. Not for public use
 
 ## 4.1.3 — Restore AC-coupled charge commands (8 November 2026)
 

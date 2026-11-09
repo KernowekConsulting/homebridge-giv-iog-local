@@ -1,23 +1,23 @@
 {
-  "version": "4.1.3",
+  "version": "4.2.0-beta.1",
   "status": "simulation-validated",
-  "runtimeSha256": "47343a6af94a9c6afb5df72cfbdfcdce6323f032e92ec846a8dedd2dc5c019e3",
+  "runtimeSha256": "cceba94cc5bc7621a5c1405c014cdbfef1fd8f6d6b3db508c289ea3a603fabf2",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_4.1.3.md",
-  "reason": "Owner requested exact regression fixes, validation and shipment on 8 November 2026. Simulation-gated stable patch; no new live inverter validation or formal paired resource budgets.",
-  "stableReadiness": {
-    "version": "4.1.3",
-    "channel": "stable",
-    "scope": "ce-ac-upgrade-regression",
+  "evidence": "docs/maintainer/VALIDATION_4.2.0_BETA1.md",
+  "reason": "Owner authorised beta publication after all checks pass on 9 November 2026. Physical validation is not claimed.",
+  "betaPublication": {
+    "version": "4.2.0-beta.1",
+    "authorizedBy": "project owner",
+    "authorizedOn": "2026-11-09",
+    "channel": "beta",
+    "scope": "marstek-commissioning",
+    "condition": "all-checks-pass",
+    "physicalValidationClaimed": false,
     "resourceBudgetsClaimed": false,
-    "automaticSolarPlanningEnabled": false,
-    "physicalControlValidationClaimed": false,
-    "authorisedBy": "project owner",
-    "authorisedOn": "2026-11-08",
-    "condition": "simulation-passes"
+    "commissioningRequired": true
   },
   "simulationValidation": {
     "sourcePassed": true,

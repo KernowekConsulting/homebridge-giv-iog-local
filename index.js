@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { MarstekHomebridge } = require('./lib/marstek/homebridge');
 
 const {
   DEFAULT_ADAPTER_SERIAL,
@@ -131,10 +132,16 @@ const CANCEL_DISABLE_ATTEMPTS = 6;
 class GivHomeModbusPlatform {
   constructor(log, config, api) {
     this.config = config || {};
+    if(this.config.marstekIntegrationEnabled===true && this.config.marstekDevices?.length) {
+      const selected=this.config.marstekShadowBatteryId||this.config.marstekDevices.find(d=>d.enabled!==false)?.id;
+      this.config={...this.config,marstekShadowBatteryId:selected,marstekShadowEnabled:Boolean(this.config.marstekGatewayHost&&this.config.marstekGatewaySerial),marstekSitePreviewEnabled:Boolean(this.config.marstekGatewayHost&&this.config.marstekGatewaySerial)};
+    }
+    if(this.config.marstekIntegrationEnabled===false)this.config={...this.config,marstekDevices:[],marstekShadowEnabled:false,marstekSitePreviewEnabled:false};
+    if(this.config.marstekSitePreviewEnabled)this.config={...this.config,enableTimedChargeTiles:false,enableTimedExportTiles:false};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.1.3',
-      stage: 'GivHome 4.1.3'
+      version: '4.2.0-beta.1',
+      stage: 'GivHome 4.2.0-beta.1'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -369,17 +376,31 @@ class GivHomeModbusPlatform {
       this.log.info('Configured serial: %s -> %s / %s', this.inverterSerial, hint.family, hint.kind);
     }
 
+    if(this.config.marstekIntegrationEnabled === true) {
+      const unregister = require('./lib/marstek/communications').registerGiv([this.inverterHost,this.config.marstekGatewayHost]);
+      api.on('shutdown',unregister);
+    }
+    const loopbackControl = this.config.marstekControlEnabled === true && this.inverterHost === '127.0.0.1' && this.config.marstekGatewayHost === '127.0.0.1';
+    this.marstekAioSession = new (require('./lib/marstek/aio-session').AioSession)(this,{qualified:loopbackControl});
+    this.sitePreview = new (require('./lib/marstek/site-homebridge').SiteHomebridge)(this.log, api, this.config, {canControl:()=>this.marstek?.isControlReady(),onInvalidate:()=>{if(this.marstek?.controlSession) void this.marstek.controlSession.revoke();void this.marstekAioSession.revoke();}});
+    this.marstek = new MarstekHomebridge(this.log, api, this.config, { isPlanValid:plan=>plan?.authorityGeneration===this.sitePreview.authority?.state.generation&&!this.sitePreview.authority?.state.hold, contextProvider: nowMs => this.marstekPolicyContext(nowMs), onControlFault:async reason=>{if(this.sitePreview.authority){this.sitePreview.authority.hold(reason);this.sitePreview.state.cancel();this.sitePreview.refresh();}await this.marstekAioSession.revoke();},onCommissioned:success=>{if(success&&this.sitePreview.authority?.state.hold==='commissioning'){this.sitePreview.authority.begin('commissioning-complete',Date.now());this.sitePreview.authority.finish();}},onCommissioning:async()=>{if(this.sitePreview.authority){this.sitePreview.authority.hold('commissioning');this.sitePreview.state.cancel();this.sitePreview.refresh();}await this.marstekAioSession.revoke();},onUnavailable:()=>this.marstekAioSession.revoke(), onSample: async sample => {const plan=this.sitePreview.sample(sample);if(plan){this.marstekAioSession.qualified=this.marstek.isControlReady();const generation=this.sitePreview.authority.state.generation;await this.marstekAioSession.apply(plan,sample,this.sitePreview.state?.intent);if(generation!==this.sitePreview.authority.state.generation)return {...plan,venusW:0,leaseUntilMs:0};return {...plan,authorityGeneration:generation};}return plan;} });
+    api.on('shutdown', () => {this.marstek.stop();this.sitePreview.stop();void this.marstekAioSession.revoke();});
+
     api.on('didFinishLaunching', () => {
       this.didFinishLaunching();
     });
   }
 
   configureAccessory(accessory) {
+    if(this.sitePreview.owns(accessory)){this.sitePreview.configureAccessory(accessory);return;}
+    if(this.marstek.owns(accessory)){this.marstek.configureAccessory(accessory);return;}
     this.accessories.push(accessory);
     this.accessoryByUUID.set(accessory.UUID, accessory);
   }
 
   didFinishLaunching() {
+    try { this.sitePreview.start(); this.marstek.start(); }
+    catch(error) { this.log.error('[Marstek] Startup failed: %s',error.message); this.marstek.stop(); }
     const validation = this.validateConfiguredTarget();
     if (!validation.ok) {
       this.log.warn('Not configured: %s', validation.reason);
@@ -421,6 +442,28 @@ class GivHomeModbusPlatform {
       this.log.info('GivHome capability read-only capability discovery is enabled: level=%s', this.capabilityDiscoveryLevel);
       setTimeout(() => this.runStage3CapabilityDiscovery(), 5000);
     }
+  }
+
+  marstekPolicyContext(nowMs) {
+    const { clockWindow } = require('./lib/marstek/clock-window');
+    const now = new Date(nowMs);
+    const exportOwner=this.currentControlOwner?.('export');
+    const chargeOwner=this.currentControlOwner?.('charge');
+    const ownSiteCharge=chargeOwner?.source==='Marstek Charge To';
+    const ownSiteExport=exportOwner?.source==='Marstek Export To';
+    const cooperativeCharge=require('./lib/marstek/site-settings').chargeCooperation(chargeOwner);
+    const plannedExport=exportOwner?.phase==='active' && ['Octopus Flux Export','Evening Excess Export','Octopus Agile Export'].includes(exportOwner.source);
+    const night = clockWindow(nowMs, this.applianceControl.cheapStart, this.applianceControl.cheapEnd, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const cheap = this.currentCheapStateForStatusTiles(now);
+    return { exportActive:Boolean(plannedExport),cooperativeCharge,externalOwner:Boolean((exportOwner&&!plannedExport&&!ownSiteExport)||(chargeOwner&&!cooperativeCharge&&!ownSiteCharge)),overnightEnabled: this.config.marstekOvernightEnabled !== false && this.config.enableCheapOvernightCharging !== false,
+      nightActive: night.active, nightSuppressed: this.occurrenceStopped('Cheap Overnight', now, new Date(night.endAtMs || nowMs)), nightEndAtMs: night.endAtMs, occurrenceId: night.occurrenceId,
+      nightTargetSoc: this.effectiveOvernightTarget(cheap, now),
+      iogEnabled: this.applianceControl.features.homeBatteryProtectionDuringSmartSlots,
+      iogActive: Boolean(cheap.smartActive || cheap.graceActive), iogSuppressed: this.occurrenceStopped('Intelligent Octopus Go Home Battery Protection', now, cheap.protectedEnd), iogMode: this.applianceControl.iogHomeBatteryProtectionMode,
+      iogTargetSoc: this.applianceControl.iogChargeTargetSoc, iogEndAtMs: cheap.protectedEnd?.getTime(),
+      iogFresh: this.octopusState.lastPollOk, iogFetchedAtMs: this.octopusState.lastPollMs,
+      iogFreshForMs: Math.max(90000, this.applianceControl.octopusPollSeconds * 2000),
+      emergencyStop: this.emergencyHeld() || Boolean(this.emergencyInFlight), automationHold: this.config.marstekAutomationHold === true };
   }
 
   validateConfiguredTarget() {
@@ -1527,6 +1570,7 @@ class GivHomeModbusPlatform {
 
   manualChargeClientOptions() {
     return {
+      expectedSerial: this.config.marstekIntegrationEnabled === true ? this.inverterSerial : undefined,
       host: this.inverterHost,
       port: this.inverterPort,
       deviceAddress: this.deviceAddress,
@@ -2622,6 +2666,7 @@ class GivHomeModbusPlatform {
   }
 
   async writeDirectRegister(register, value, label) {
+    if(this.marstekActivationGuard && !this.marstekActivationGuard()) throw new Error('Marstek activation revoked');
     if (this.controlStorageFault) throw new Error('Control journal unavailable; no writes sent');
     if (this.emergencyHeld() && !(this.emergencyWriting && label.startsWith('Emergency Stop '))) throw new Error('command held by Emergency Stop');
     const frame = buildOfflineWriteSingleRegisterFrame({ deviceAddress: this.deviceAddress, register, value });

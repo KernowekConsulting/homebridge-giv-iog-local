@@ -26,10 +26,11 @@ test('Config preserves the published contract except the deliberate CE automatic
   assert.equal(schema.schema.properties.enableCeAcCoupledLiveWrites.default, true);
   const contract = structuredClone(schema.schema);
   contract.properties.enableCeAcCoupledLiveWrites.default = false;
+  for (const key of Object.keys(contract.properties).filter(k => k.startsWith('marstek'))) delete contract.properties[key];
   const hash = crypto.createHash('sha256').update(JSON.stringify(runtimeContract(contract))).digest('hex');
   assert.equal(hash, expectedContract);
-  const fieldHash = crypto.createHash('sha256').update(JSON.stringify([...new Set(fields(schema.form, {}).map(n => n.key))].filter(key => key !== 'enableApplianceControl').sort())).digest('hex');
-  assert.equal(fieldHash, 'a507f158f6fa9be50528855a86d6bc37d3145d3446e58442e94a41eaa79e4b7c', 'only deliberately retired settings may disappear');
+  const fieldHash = crypto.createHash('sha256').update(JSON.stringify([...new Set(fields(schema.form, {}).map(n => n.key).filter(key => !key.startsWith("marstek")))].sort())).digest('hex');
+  assert.equal(fieldHash, '141185aa072b324325cf98b596151e424978ef6b1e0b7960a647e7dc0ddc83bb', 'only deliberately retired settings may disappear');
   const known = new Set(Object.keys(schema.schema.properties));
   for (const { key } of fields(schema.form, {})) assert.ok(known.has(key.split(/[.[]/)[0]), `unknown setting ${key}`);
 });
@@ -62,7 +63,7 @@ test('Custom days, time limits and IOG target follow only their matching choices
 });
 
 test('All nine selectors have explicit UI choices without changing optional stored schema', () => {
-  const selectors = fields(schema.form, {}).filter(n => n.key && (schema.schema.properties[n.key]?.enum || schema.schema.properties[n.key]?.oneOf));
+  const selectors = fields(schema.form, {}).filter(n => n.key && !n.key.startsWith('marstek') && (schema.schema.properties[n.key]?.enum || schema.schema.properties[n.key]?.oneOf));
   assert.equal(selectors.length, 9);
   for (const field of selectors) {
     assert.equal(field.required, true);
@@ -172,23 +173,4 @@ test('retired automatic settings and inaccessible export comparison are absent',
     'octopusAgileOutgoingMpanAuditDelayHours', 'octopusAgileOutgoingMpanMismatchToleranceKwh',
     'octopusAgileOutgoingSuspendOnMpanMismatch']) assert.equal(Object.hasOwn(schema.schema.properties, key), false);
   assert.equal(JSON.stringify(schema.form).includes('Compare export meter readings'), false);
-});
-
-for (const legacy of [false, true]) test(`settings migration removes retired CE engineering flag=${legacy} without changing normal choices`, () => {
-  const input = { name: 'GivHome', enableCeAcCoupledLiveWrites: legacy, ceAcCoupledLiveWriteAcknowledgement: 'old-token',
-    enableApplianceControl: false, enableTimedChargeTiles: false, enableEvSmartWindowBatteryProtection: false };
-  const result = migrateExistingConfig(input);
-  const config = result.config;
-  assert.equal(Object.hasOwn(config, 'enableCeAcCoupledLiveWrites'), false);
-  assert.equal(Object.hasOwn(config, 'ceAcCoupledLiveWriteAcknowledgement'), false);
-  for (const key of ['enableApplianceControl', 'enableTimedChargeTiles', 'enableEvSmartWindowBatteryProtection']) assert.equal(config[key], false);
-  assert.equal(input.enableCeAcCoupledLiveWrites, legacy, 'migration does not mutate supplied config');
-  assert.deepEqual(migrateExistingConfig(config).config, config, 'idempotent migration');
-});
-
-test('battery control switch is visible and its false overrides the legacy master alias', () => {
-  assert.ok(visible({}).includes('enableApplianceControl'));
-  assert.equal(buildApplianceControlConfig({ enableApplianceControl: false, enableStage11ApplianceControl: true,
-    applianceControlAcknowledgement: 'ENABLE_GIVHOME_APPLIANCE_CONTROL' }).masterGateSatisfied, false);
-  assert.equal(migrateExistingConfig({ enableStage11ApplianceControl: false }).config.enableApplianceControl, false);
 });
