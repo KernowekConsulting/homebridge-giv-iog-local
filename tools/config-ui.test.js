@@ -174,3 +174,4 @@ test('retired automatic settings and inaccessible export comparison are absent',
     'octopusAgileOutgoingSuspendOnMpanMismatch']) assert.equal(Object.hasOwn(schema.schema.properties, key), false);
   assert.equal(JSON.stringify(schema.form).includes('Compare export meter readings'), false);
 });
+test('Venus setup assigns unique stable internal IDs without asking for Home Assistant IDs',()=>{const {migrateExistingConfig}=require('../homebridge-ui/public/config-migration');const initial=migrateExistingConfig({marstekDevices:[{id:'garage-venus',host:'192.0.2.1'},{host:'192.0.2.2'},{id:'venus-1',host:'192.0.2.3'},{id:'venus-1',host:'192.0.2.4'}]}).config;assert.equal(initial.marstekDevices[0].id,'garage-venus');assert.equal(new Set(initial.marstekDevices.map(d=>d.id)).size,4);initial.marstekDevices[0].host='192.0.2.9';assert.deepEqual(migrateExistingConfig(initial).config.marstekDevices.map(d=>d.id),initial.marstekDevices.map(d=>d.id));});

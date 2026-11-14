@@ -16,7 +16,7 @@ const recorder=read('lib/internal-flight-recorder.js');
 const targetReconciliation=read('lib/charge-target-reconciliation.js');
 const { buildChargeTargetReconciliationPlan, verifyChargeTargetReconciliation } = require('../lib/charge-target-reconciliation');
 const { getMergedCheapState } = require('../lib/appliance-integrated-control');
-check('package identity',pkg.name==='homebridge-giv-iog-local'&&pkg.version==='4.2.0-beta.1',`${pkg.name}@${pkg.version}`);
+check('package identity',pkg.name==='homebridge-giv-iog-local'&&pkg.version==='4.2.0-beta.2',`${pkg.name}@${pkg.version}`);
 check('public display name',pkg.displayName==='GivHome',pkg.displayName);
 check('GPL v4 licence',pkg.license==='GPL-3.0-or-later',pkg.license);
 check('v4 repository',pkg.repository&&/KernowekConsulting\/homebridge-giv-iog-local\.git$/.test(pkg.repository.url||''));
@@ -38,7 +38,7 @@ check('Flux single-peak completion retained',idx.includes('octopusFluxExportComp
 check('Flux requested-energy budgeting retained',idx.includes('requestedEnergyBudgetKwh'));
 check('Eve production implementation retained',idx.includes('createEveEnergyCharacteristics')&&idx.includes('ensureEveEnergyCharacteristics')&&idx.includes('fakegato-history'));
 check('Predicted Solar controller retained',idx.includes('PredictedSolarController')&&fs.existsSync(path.join(root,'lib/predicted-solar.js')));
-check('v4.1.3 runtime identity',constants.includes("const STAGE = 'GivHome 4.2.0-beta.1';")&&idx.includes("version: '4.2.0-beta.1'")&&idx.includes("stage: 'GivHome 4.2.0-beta.1'"));
+check('v4.1.3 runtime identity',constants.includes("const STAGE = 'GivHome 4.2.0-beta.2';")&&idx.includes("version: '4.2.0-beta.2'")&&idx.includes("stage: 'GivHome 4.2.0-beta.2'"));
 check('Flux/Agile persisted state continuity retained',idx.includes("stage: 'givhome-v4-octopus-flux-export-observed-power-ratio-planner'")&&idx.includes("const fallback = { version: '4.0.0', serial:")&&idx.includes("version: '4.0.0',\n      builtAt:"));
 check('Predicted Solar user-agent stable v4 retained',solar.includes("homebridge-giv-iog-local/4.0.0"));
 check('flight recorder product label converted',recorder.includes("const PLUGIN = 'GivHome';"));

@@ -37,7 +37,7 @@ async function runScenario(def,{seed=1,seconds=900}={}){
    now=Date.parse('2026-11-05T00:00:00Z')+t*1000;
    for(const e of def.events.filter(e=>e.at===t)){
     try{switch(e.type){case 'target':await ui.tiles.charge.level.handleSetRequest(e.value);break;case 'exportTarget':await ui.tiles.export.level.handleSetRequest(e.value);break;case 'charge':await ui.tiles.charge.on.handleSetRequest(true);break;case 'export':await ui.tiles.export.on.handleSetRequest(true);break;case 'offCharge':await ui.tiles.charge.on.handleSetRequest(false);break;case 'offExport':await ui.tiles.export.on.handleSetRequest(false);break;case 'restart':ui.stop();start();break;default:env[e.type]=e.value;}
-     events.push({...e,outcome:'accepted'});
+     events.push({...e,outcome:['charge','export','target','exportTarget'].includes(e.type)&&ui.pending?'pending':'accepted'});
     }catch(error){rejectedInteractions++;events.push({...e,outcome:'rejected',reason:String(error.hapStatus||error.message||error)});}
    }
    // Bounded seeded domestic noise changes demand without assuming a typical day.

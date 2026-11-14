@@ -107,6 +107,7 @@ const {
   updateLearningState: updateAgileExportAutopilotLearningState
 } = require('./lib/agile-export-autopilot');
 
+const {combinedSocLevel}=require('./lib/marstek/combined-soc-display');
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivHomeModbus';
 const MANUAL_CHARGE_ACCESSORY_ID = 'manual-charge-command';
@@ -130,18 +131,18 @@ const CANCEL_DISABLE_ATTEMPTS = 6;
 
 
 class GivHomeModbusPlatform {
-  constructor(log, config, api) {
+  constructor(log, config, api, {venusTransport=require('./lib/marstek/build-profile').transport}={}) {
     this.config = config || {};
     if(this.config.marstekIntegrationEnabled===true && this.config.marstekDevices?.length) {
       const selected=this.config.marstekShadowBatteryId||this.config.marstekDevices.find(d=>d.enabled!==false)?.id;
-      this.config={...this.config,marstekShadowBatteryId:selected,marstekShadowEnabled:Boolean(this.config.marstekGatewayHost&&this.config.marstekGatewaySerial),marstekSitePreviewEnabled:Boolean(this.config.marstekGatewayHost&&this.config.marstekGatewaySerial)};
+      this.config={...this.config,marstekReuseBatteryLevel:true,marstekShadowBatteryId:selected,marstekShadowEnabled:Boolean(this.config.marstekGatewayHost&&this.config.marstekGatewaySerial),marstekSitePreviewEnabled:Boolean(this.config.marstekGatewayHost&&this.config.marstekGatewaySerial)};
     }
     if(this.config.marstekIntegrationEnabled===false)this.config={...this.config,marstekDevices:[],marstekShadowEnabled:false,marstekSitePreviewEnabled:false};
     if(this.config.marstekSitePreviewEnabled)this.config={...this.config,enableTimedChargeTiles:false,enableTimedExportTiles:false};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.2.0-beta.1',
-      stage: 'GivHome 4.2.0-beta.1'
+      version: '4.2.0-beta.2',
+      stage: 'GivHome 4.2.0-beta.2'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -381,10 +382,10 @@ class GivHomeModbusPlatform {
       api.on('shutdown',unregister);
     }
     const loopbackControl = this.config.marstekControlEnabled === true && this.inverterHost === '127.0.0.1' && this.config.marstekGatewayHost === '127.0.0.1';
-    this.marstekAioSession = new (require('./lib/marstek/aio-session').AioSession)(this,{qualified:loopbackControl});
-    this.sitePreview = new (require('./lib/marstek/site-homebridge').SiteHomebridge)(this.log, api, this.config, {canControl:()=>this.marstek?.isControlReady(),onInvalidate:()=>{if(this.marstek?.controlSession) void this.marstek.controlSession.revoke();void this.marstekAioSession.revoke();}});
-    this.marstek = new MarstekHomebridge(this.log, api, this.config, { isPlanValid:plan=>plan?.authorityGeneration===this.sitePreview.authority?.state.generation&&!this.sitePreview.authority?.state.hold, contextProvider: nowMs => this.marstekPolicyContext(nowMs), onControlFault:async reason=>{if(this.sitePreview.authority){this.sitePreview.authority.hold(reason);this.sitePreview.state.cancel();this.sitePreview.refresh();}await this.marstekAioSession.revoke();},onCommissioned:success=>{if(success&&this.sitePreview.authority?.state.hold==='commissioning'){this.sitePreview.authority.begin('commissioning-complete',Date.now());this.sitePreview.authority.finish();}},onCommissioning:async()=>{if(this.sitePreview.authority){this.sitePreview.authority.hold('commissioning');this.sitePreview.state.cancel();this.sitePreview.refresh();}await this.marstekAioSession.revoke();},onUnavailable:()=>this.marstekAioSession.revoke(), onSample: async sample => {const plan=this.sitePreview.sample(sample);if(plan){this.marstekAioSession.qualified=this.marstek.isControlReady();const generation=this.sitePreview.authority.state.generation;await this.marstekAioSession.apply(plan,sample,this.sitePreview.state?.intent);if(generation!==this.sitePreview.authority.state.generation)return {...plan,venusW:0,leaseUntilMs:0};return {...plan,authorityGeneration:generation};}return plan;} });
-    api.on('shutdown', () => {this.marstek.stop();this.sitePreview.stop();void this.marstekAioSession.revoke();});
+    this.marstekAioSession = new (require('./lib/marstek/aio-session').AioSession)(this,{qualified:loopbackControl,onFault:error=>{this.log.error('[Marstek] AIO restoration failed: %s',error.message);this.sitePreview.authority?.hold('aio-stop-unconfirmed');this.sitePreview.state?.cancel();this.sitePreview.refresh();void this.marstek.controlSession?.revoke();}});
+    this.sitePreview = new (require('./lib/marstek/site-homebridge').SiteHomebridge)(this.log, api, {...this.config,marstekTimedApi:venusTransport==='local-api'}, {canControl:()=>this.marstek?.isControlReady(),aioEvidenceProvider:()=>{let gateway;try{gateway=this.marstek?.gatewayFeed?.snapshot();}catch{}return {gateway,nowMs:Date.now(),context:{aioEvidence:this.marstekAioEvidence?{...this.marstekAioEvidence,singleAio:this.marstek?.gatewayFeed?.knownCount===1}:null}};},onRefresh:()=>this.publishCombinedBatteryLevel(),canRecover:()=>this.marstekAioSession.canRecover(),onInvalidate:(options={})=>{if(this.marstek?.controlSession) void this.marstek.controlSession.revoke();if(options.preserveNative)void this.marstekAioSession.holdForTelemetry().catch(error=>this.marstekAioSession.onFault(error));else void this.marstekAioSession.revoke().catch(error=>this.marstekAioSession.onFault(error));}});
+    this.marstek = new MarstekHomebridge(this.log, api, this.config, { venusTransport,isPlanValid:plan=>plan?.authorityGeneration===this.sitePreview.authority?.state.generation&&!this.sitePreview.authority?.state.hold, contextProvider: nowMs => this.marstekPolicyContext(nowMs), onControlFault:async reason=>{if(this.sitePreview.authority){this.sitePreview.authority.hold(reason);this.sitePreview.state.cancel();this.sitePreview.refresh();}await this.marstekAioSession.revoke();},onCommissioned:success=>{if(success&&this.sitePreview.authority?.state.hold==='commissioning'){this.sitePreview.authority.begin('commissioning-complete',Date.now());this.sitePreview.authority.finish();}},onCommissioning:async()=>{if(this.sitePreview.authority){this.sitePreview.authority.hold('commissioning');this.sitePreview.state.cancel();this.sitePreview.refresh();}await this.marstekAioSession.revoke();},onObservation:sample=>this.sitePreview.observe(sample),onUnavailable:()=>{this.sitePreview.resetContinuity();if(this.sitePreview.state?.intent){this.sitePreview.pauseIntent('telemetry-unavailable');return this.marstekAioSession.holdForTelemetry();}return this.marstekAioSession.revoke();}, onSample: async sample => {const plan=this.sitePreview.sample(sample);if(plan){this.marstekAioSession.qualified=this.marstek.isControlReady();const generation=this.sitePreview.authority.state.generation;void this.marstekAioSession.apply(plan,sample,this.sitePreview.state?.intent).catch(error=>{if(generation!==this.sitePreview.authority.state.generation)return;this.log.error('[Marstek] AIO action failed: %s',error.message);this.sitePreview.authority.hold(error.code==='AIO_STOP_UNCONFIRMED'?'aio-stop-unconfirmed':'aio-control-fault');this.sitePreview.state.cancel();void this.marstek.controlSession?.revoke();});if(generation!==this.sitePreview.authority.state.generation)return {...plan,venusW:0,leaseUntilMs:0};return {...plan,authorityGeneration:generation};}return plan;} });
+    api.on('shutdown', () => {this.marstek.stop();this.sitePreview.stop();void this.marstekAioSession.revoke().catch(error=>this.marstekAioSession.onFault(error));});
 
     api.on('didFinishLaunching', () => {
       this.didFinishLaunching();
@@ -399,7 +400,7 @@ class GivHomeModbusPlatform {
   }
 
   didFinishLaunching() {
-    try { this.sitePreview.start(); this.marstek.start(); }
+    try { this.sitePreview.start(); this.marstek.start();if(this.marstekAioSession.interruptedOwners.length)void this.marstekAioSession.revoke().catch(error=>this.marstekAioSession.onFault(error)); }
     catch(error) { this.log.error('[Marstek] Startup failed: %s',error.message); this.marstek.stop(); }
     const validation = this.validateConfiguredTarget();
     if (!validation.ok) {
@@ -434,6 +435,7 @@ class GivHomeModbusPlatform {
 
     this.pollOnce();
     this.pollTimer = setInterval(() => this.pollOnce(), this.pollIntervalSeconds * 1000);
+    this.startMarstekScheduledEvidencePolling();
     this.startManualChargeSupervisor();
     this.startApplianceAutomationLoops();
     this.startCommandTruthReconciliation();
@@ -442,6 +444,11 @@ class GivHomeModbusPlatform {
       this.log.info('GivHome capability read-only capability discovery is enabled: level=%s', this.capabilityDiscoveryLevel);
       setTimeout(() => this.runStage3CapabilityDiscovery(), 5000);
     }
+  }
+
+  marstekTransportBusy(nowMs) {
+    // Interleave Gateway requests only through the existing global Giv broker.
+    return !(this.marstekAioSession?.transportActive||nowMs<this.marstekAioSession?.gatewayReadUntilMs)&&Boolean(this.pollInFlight||this.manualChargeSupervisorInFlight||this.commandIntentPending||this.commandTransportInFlight||nowMs<this.commandPollHoldUntilMs);
   }
 
   marstekPolicyContext(nowMs) {
@@ -455,15 +462,16 @@ class GivHomeModbusPlatform {
     const plannedExport=exportOwner?.phase==='active' && ['Octopus Flux Export','Evening Excess Export','Octopus Agile Export'].includes(exportOwner.source);
     const night = clockWindow(nowMs, this.applianceControl.cheapStart, this.applianceControl.cheapEnd, Intl.DateTimeFormat().resolvedOptions().timeZone);
     const cheap = this.currentCheapStateForStatusTiles(now);
-    return { exportActive:Boolean(plannedExport),cooperativeCharge,externalOwner:Boolean((exportOwner&&!plannedExport&&!ownSiteExport)||(chargeOwner&&!cooperativeCharge&&!ownSiteCharge)),overnightEnabled: this.config.marstekOvernightEnabled !== false && this.config.enableCheapOvernightCharging !== false,
+    const iogEvidence=require('./lib/marstek/iog-evidence').evidence(this.octopusState,{nowMs,protectedEndAtMs:cheap.protectedEnd?.getTime(),active:Boolean(cheap.smartActive||cheap.graceActive),pollSeconds:this.applianceControl.octopusPollSeconds});
+    return { givBusy:this.marstekTransportBusy(nowMs),priorityControlEnabled:this.config.marstekIntegrationEnabled === true,aioEvidence:this.marstekAioEvidence?{...this.marstekAioEvidence,singleAio:this.marstek?.gatewayFeed?.knownCount===1}:null,ecoEnabled:this.config.marstekIntegrationEnabled === true,exportActive:Boolean(plannedExport),cooperativeCharge,externalOwner:Boolean((exportOwner&&!plannedExport&&!ownSiteExport)||(chargeOwner&&!cooperativeCharge&&!ownSiteCharge)),overnightEnabled: this.config.marstekOvernightEnabled !== false && this.config.enableCheapOvernightCharging !== false,
       nightActive: night.active, nightSuppressed: this.occurrenceStopped('Cheap Overnight', now, new Date(night.endAtMs || nowMs)), nightEndAtMs: night.endAtMs, occurrenceId: night.occurrenceId,
       nightTargetSoc: this.effectiveOvernightTarget(cheap, now),
       iogEnabled: this.applianceControl.features.homeBatteryProtectionDuringSmartSlots,
       iogActive: Boolean(cheap.smartActive || cheap.graceActive), iogSuppressed: this.occurrenceStopped('Intelligent Octopus Go Home Battery Protection', now, cheap.protectedEnd), iogMode: this.applianceControl.iogHomeBatteryProtectionMode,
       iogTargetSoc: this.applianceControl.iogChargeTargetSoc, iogEndAtMs: cheap.protectedEnd?.getTime(),
-      iogFresh: this.octopusState.lastPollOk, iogFetchedAtMs: this.octopusState.lastPollMs,
-      iogFreshForMs: Math.max(90000, this.applianceControl.octopusPollSeconds * 2000),
-      emergencyStop: this.emergencyHeld() || Boolean(this.emergencyInFlight), automationHold: this.config.marstekAutomationHold === true };
+      iogFresh: iogEvidence.fresh, iogFetchedAtMs: iogEvidence.fetchedAtMs,
+      iogFreshForMs: iogEvidence.freshForMs,
+      emergencyStop: this.emergencyHeld() || Boolean(this.emergencyInFlight), automationHold: this.config.marstekAutomationHold === true || !this.applianceControl.masterGateSatisfied };
   }
 
   validateConfiguredTarget() {
@@ -1571,6 +1579,7 @@ class GivHomeModbusPlatform {
   manualChargeClientOptions() {
     return {
       expectedSerial: this.config.marstekIntegrationEnabled === true ? this.inverterSerial : undefined,
+      givLeaseOptions: this.marstekAioSession?.phase==='stopping'?{priority:100}:undefined,
       host: this.inverterHost,
       port: this.inverterPort,
       deviceAddress: this.deviceAddress,
@@ -2677,6 +2686,8 @@ class GivHomeModbusPlatform {
       port: this.inverterPort,
       responseTimeoutMs: 3000,
       enablePreSendGracefulContinuity: true,
+      valid: this.marstekActivationGuard || undefined,
+      givPriority: this.marstekAioSession?.phase==='stopping'?100:10,
       onPreSendContinuityEvent: (event) => {
         if (event.result === 'fail') this.log.warn('GivHome command Graceful Continuity pre-send: label=%s opportunity=%s result=fail error=%s noPayloadSent=yes', label, event.opportunity, event.error || 'unknown');
       },
@@ -2686,7 +2697,7 @@ class GivHomeModbusPlatform {
     if (!writeResponse.responseReceived) {
       this.log.warn('GivHome command Function 06 acknowledgement uncertain: label=%s payloadSent=%s postSendError=%s readbackReconciliation=required', label, writeResponse.payloadSent ? 'yes' : 'no', writeResponse.postSendError || 'none');
     }
-    const valueBack = (await this.readHoldingRegisters(register, 1, label))[0];
+    const valueBack = await require('./lib/marstek/readback-settle').settleReadback(async()=>(await this.readHoldingRegisters(register, 1, label))[0], {expected:value,enabled:typeof this.marstekActivationGuard==='function',valid:()=>Boolean(this.marstekActivationGuard?.())&&!this.emergencyHeld()});
     if (valueBack !== value) throw new Error(`${label} readback failed: requested=${value} readback=${valueBack} noBlindResend=yes`);
     this.invalidateCommandTruthSnapshot(`${label} HR${register}`);
     this.log.warn('GivHome command Function 06 reconciled: label=%s HR%s=%s responseReceived=%s readback=verified physicalFlow=not-verified noBlindResend=yes', label, register, value, writeResponse.responseReceived ? 'yes' : 'no');
@@ -2969,6 +2980,7 @@ class GivHomeModbusPlatform {
       this.octopusState.dispatches = dispatches;
       this.octopusState.lastPollMs = nowMs;
       this.octopusState.lastPollOk = true;
+      this.octopusState.lastSuccessfulPollMs = nowMs;
       this.octopusState.lastError = '';
       const windows = renderDispatchWindowsForLog(dispatches);
       const state = getMergedCheapState(pollNow, dispatches, this.applianceControl, this.octopusState);
@@ -4141,7 +4153,29 @@ class GivHomeModbusPlatform {
     }
   }
 
+  combinedBatteryDisplayLevel(){
+    if(this.marstek?.venusTransport==='local-api'){
+      const entry=this.marstek.entries?.get(this.config.marstekShadowBatteryId),planner=this.sitePreview?.planner;
+      const value=require('./lib/marstek/combined-soc-display').independentSocLevel({gateway:this.marstek.gatewayFeed,aio:this.marstekAioEvidence,venus:entry?.monitor.state(),serial:this.inverterSerial,aioCapacityKwh:planner?.aioCapacityKwh,venusCapacityKwh:planner?.venusCapacityKwh});
+      if(value!==null)return value;
+    }
+    return this.sitePreview?.socLevel?this.sitePreview.socLevel():combinedSocLevel(this.sitePreview?.latest);
+  }
+
+  publishCombinedBatteryLevel(){
+    if(!this.config.marstekReuseBatteryLevel)return;
+    const level=this.combinedBatteryDisplayLevel(),fault=()=>new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    for(const a of this.accessoryByUUID.values()){
+      if(a.context.definitionId!==ACCESSORY_IDS.BATTERY_LEVEL)continue;
+      const service=a.getService(this.Service.Lightbulb);if(!service)continue;
+      require('./lib/marstek/homekit-continuity').publish(service.getCharacteristic(this.Characteristic.On),level===null?fault():true);
+      require('./lib/marstek/homekit-continuity').publish(service.getCharacteristic(this.Characteristic.Brightness),level===null?fault():level);
+    }
+  }
+
   configureAccessoryServices(accessory, definition) {
+    const displayName=definition.id===ACCESSORY_IDS.BATTERY_LEVEL&&this.config.marstekReuseBatteryLevel?'Battery SOC':definition.displayName;
+    if(definition.id===ACCESSORY_IDS.BATTERY_LEVEL&&this.config.marstekReuseBatteryLevel){accessory.displayName=displayName;accessory.getService(this.Service.AccessoryInformation)?.setCharacteristic(this.Characteristic.Name,displayName);}
     const info = accessory.getService(this.Service.AccessoryInformation) || accessory.addService(this.Service.AccessoryInformation);
     info
       .setCharacteristic(this.Characteristic.Manufacturer, 'Kernowek Consulting')
@@ -4161,9 +4195,14 @@ class GivHomeModbusPlatform {
     }
 
     const service = accessory.getServiceById(this.Service.Lightbulb, definition.subtype)
-      || accessory.addService(this.Service.Lightbulb, definition.displayName, definition.subtype);
-    service.setCharacteristic(this.Characteristic.Name, definition.displayName);
+      || accessory.addService(this.Service.Lightbulb, displayName, definition.subtype);
+    service.setCharacteristic(this.Characteristic.Name, displayName);
 
+    if(definition.id===ACCESSORY_IDS.BATTERY_LEVEL&&this.config.marstekReuseBatteryLevel){
+      const current=()=>{const value=this.combinedBatteryDisplayLevel();if(value===null)throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);return value;};
+      service.getCharacteristic(this.Characteristic.On).onGet(()=>{current();return true;});
+      service.getCharacteristic(this.Characteristic.Brightness).onGet(current);
+    }
     service.getCharacteristic(this.Characteristic.On)
       .onSet(async () => {});
 
@@ -4363,6 +4402,21 @@ class GivHomeModbusPlatform {
   }
 
 
+  startMarstekScheduledEvidencePolling() {
+    if (this.config.marstekIntegrationEnabled !== true || this.config.marstekControlEnabled !== true || !this.enableReadOnlyPolling) return;
+    this.marstekEvidenceTimer = setInterval(() => this.refreshMarstekScheduledEvidence(), 5000);
+    this.marstekEvidenceTimer.unref?.();
+    this.api.on('shutdown', () => clearInterval(this.marstekEvidenceTimer));
+  }
+
+  refreshMarstekScheduledEvidence(nowMs = Date.now()) {
+    const needsPoll = require('./lib/marstek/scheduled-evidence').needsPoll;
+    if (this.pollInFlight || this.manualChargeSupervisorInFlight || this.commandIntentPending || this.commandTransportInFlight || nowMs < this.commandPollHoldUntilMs) return false;
+    if (!needsPoll({config:this.config,context:this.marstekPolicyContext(nowMs),nowMs,evidence:this.marstekAioEvidence,lastAttemptAtMs:this.marstekAioPollStartedAtMs,singleAio:this.marstek?.gatewayFeed?.knownCount===1})) return false;
+    void this.pollOnce();
+    return true;
+  }
+
   async pollOnce() {
     if (this.pollInFlight) return;
     if (this.manualChargeSupervisorInFlight) {
@@ -4380,6 +4434,7 @@ class GivHomeModbusPlatform {
     this.pollInFlight = true;
 
     const started = Date.now();
+    this.marstekAioPollStartedAtMs = started;
 
     try {
       const client = new DirectLocalReadOnlyClient({
@@ -4404,7 +4459,7 @@ class GivHomeModbusPlatform {
 
       const decoded = decodeInputRegisters0To60(response.values);
       const model = deriveTelemetryModel(decoded, new Date());
-      this.handlePollSuccess({ response, model, durationMs: Date.now() - started });
+      this.handlePollSuccess({ response, model, observedAtMs: started, durationMs: Date.now() - started });
     } catch (err) {
       this.handlePollFailure(err);
     } finally {
@@ -4412,7 +4467,8 @@ class GivHomeModbusPlatform {
     }
   }
 
-  handlePollSuccess({ response, model, durationMs }) {
+  handlePollSuccess({ response, model, observedAtMs = Date.now(), durationMs }) {
+    this.marstekAioEvidence={observedAtMs,identityVerified:Boolean(this.inverterSerial&&response.inverterSerial===this.inverterSerial),serial:response.inverterSerial,socPercent:model.socPercent,acDischargeW:Number.isFinite(model.batterySignedPowerW)?model.batterySignedPowerW:null,gridExportW:model.gridExportPowerW,gridImportW:model.gridImportPowerW,gridRawPowerW:model.gridRawPowerW,solarW:model.pvPowerW,householdLoadW:model.loadPowerW};
     const previousFailures = this.health.consecutiveFailures;
 
     this.latestModel = model;
@@ -4512,6 +4568,7 @@ class GivHomeModbusPlatform {
       }
 
       if (id === ACCESSORY_IDS.BATTERY_LEVEL) {
+        if(this.config.marstekReuseBatteryLevel){this.publishCombinedBatteryLevel();continue;}
         const level = batteryLevelState(model);
         publish(service, this.Characteristic.On, true);
         publish(service, this.Characteristic.Brightness, level);

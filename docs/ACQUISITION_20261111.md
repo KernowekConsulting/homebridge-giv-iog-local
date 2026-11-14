@@ -1,0 +1,15 @@
+# Acquisition lifecycle correction — 11 November 2026
+
+The live47% export accepted its Home request but did not sustain export. AIO preparation holds its normal polling, Gateway collector formerly also deferred, and the activation guard required a continuously renewed short-lived proposal. This conflicted with lengthy control preflight. The old fast fixture bypassed the queue and activation guard.
+
+During a Marstek percentage-action transaction only, Gateway reads may interleave via the existing global giv-site broker. Transactions remain serial across AIO/Gateway: no new reader, no concurrent wire operations, no relaxed six-second freshness or2.5s skew. The narrowly scoped allowance also covers the established five-second post-command hold, expiring after six seconds. Unrelated commands retain existing defer behaviour. If telemetry cannot renew, preparation cannot enable.
+
+Read-only preparation is bounded to120s and does not authorise output by itself. Every existing mutation still needs a currently live proposal and unchanged action/generation/power allowance. The live IOG/hold policy is rechecked, including immediately after connect/queue recovery before the payload is sent. Off and IOG pre-emption cancel acquisition. No post-send blind activation retry is introduced.
+
+Native AIO schedules use the validated site AIO power, bounded by native inverter/profile controls, rather than the Venus fast-setpoint300W ramp. The latter remains on Venus; reducing allowed AIO power still requires restoration before reacquisition. Native ownership stays conservative if a later allowance increases; it does not silently raise power. This change fixes a300W initial acquisition becoming the permanent output. It does not introduce an unconditional site export-cap guarantee against independent AIO/PV changes.
+
+Cleanup makes at most three ownership-checked restoration attempts, preserving the same action ID. Transient read failures can recover; unresolved restoration retains ownership and raises AIO_STOP_UNCONFIRMED with its acquisition cause preserved. No generic hard-fault auto-resume is added.
+
+No UI/schema changes, new tiles or additional user settings. HomeKit On remains a bounded requested action, not measured watts. Existing SOC continuity and cancellation semantics stay intact. The standard GivEnergy-only queue, automation and timed charge/export method bodies are byte-identical to the preceding candidate. The only shared low-level addition is an optional pre-send predicate; without a Marstek guard it is inactive.
+
+Validation includes the real queue, production-style non-blocking sample updates, delayed preparation, both directions, explicit Off, IOG pre-emption, refusal with stale evidence, confirmed/unconfirmed cleanup, no-payload cancellation after connect, post-command refresh and unrelated-command deferral. The virtual per-operation600ms latency is a deterministic stress assumption, not measured hardware round-trip latency. Full release and Node22 checks are retained. Actual iPhone behaviour and physical percentage success must still be established after deployment; passing simulation alone is not that proof.

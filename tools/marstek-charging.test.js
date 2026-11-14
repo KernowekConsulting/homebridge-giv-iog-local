@@ -56,7 +56,7 @@ test('real GivModbus and Venus TCP readers feed a persisted shadow charging prop
 });
 test('4.1.2 context supplies shared Night Target and separate IOG preferences without device writes',()=>{
  const {GivHomeModbusPlatform}=require('../index');const now=Date.parse('2026-11-04T01:00:00Z');
- const platform={config:{},applianceControl:{cheapStart:'23:30',cheapEnd:'05:30',features:{homeBatteryProtectionDuringSmartSlots:true},iogHomeBatteryProtectionMode:'charge',iogChargeTargetSoc:85,octopusPollSeconds:30},
+ const platform={marstekTransportBusy:GivHomeModbusPlatform.prototype.marstekTransportBusy,config:{},applianceControl:{cheapStart:'23:30',cheapEnd:'05:30',features:{homeBatteryProtectionDuringSmartSlots:true},iogHomeBatteryProtectionMode:'charge',iogChargeTargetSoc:85,octopusPollSeconds:30},
   currentCheapStateForStatusTiles:()=>({smartActive:true,graceActive:false,protectedEnd:new Date(now+1800000)}),occurrenceStopped:()=>false,effectiveOvernightTarget:()=>70,
   octopusState:{lastPollOk:true,lastPollMs:now-1000},emergencyHeld:()=>false};
  const context=GivHomeModbusPlatform.prototype.marstekPolicyContext.call(platform,now);

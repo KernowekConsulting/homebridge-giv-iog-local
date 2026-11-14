@@ -113,7 +113,7 @@ test('complete 4.1.2 platform reads a TCP simulator and publishes a native HomeK
     registerPlatformAccessories(_p, _a, accessories) { registered.push(...accessories); },
     unregisterPlatformAccessories() {}, updatePlatformAccessories() {} };
   const p = new GivHomeModbusPlatform(log, { flightRecorderDir: directory, enableReadOnlyPolling: false,
-    marstekDevices: [{ id: 'simulated', host: '127.0.0.1', port: server.address().port }] }, api);
+    marstekDevices: [{ id: 'simulated', host: '127.0.0.1', port: server.address().port }] }, api,{venusTransport:'modbus'});
   t.after(async () => { p.marstek.stop(); clearInterval(p.flightRecorder.timer); server.closeClients(); await new Promise(resolve => server.close(resolve)); fs.rmSync(directory, { recursive: true, force: true }); });
   p.didFinishLaunching();
   const monitor = p.marstek.entries.get('simulated').monitor;

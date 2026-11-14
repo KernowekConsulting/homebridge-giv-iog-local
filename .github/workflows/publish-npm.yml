@@ -2,8 +2,8 @@ name: Publish npm
 
 on:
   push:
-    branches: ['release/v4.2.0-beta.1']
-    tags: ['v4.2.0-beta.1']
+    branches: ['release/v4.2.0-beta.2']
+    tags: ['v4.2.0-beta.2']
 
 permissions:
   id-token: write
@@ -29,7 +29,7 @@ jobs:
           test "$(npm --version)" = "11.21.1"
       - name: Verify scoped beta release
         run: |
-          test "$(node -p 'require("./package.json").version')" = "4.2.0-beta.1"
+          test "$(node -p 'require("./package.json").version')" = "4.2.0-beta.2"
           node tools/verify-observation-qualification.js --beta-publication
           npm ci --ignore-scripts
           npm test
@@ -38,7 +38,7 @@ jobs:
       - name: Verify reviewed tarball
         run: |
           npm pack
-          echo '6c666a54530f0ad455c52adc9943492e64da52f4811e1a51eed46624ea640ca0  homebridge-giv-iog-local-4.2.0-beta.1.tgz' | sha256sum --check
+          echo '85ffe43dc0b05ec7320e552270f87d4e6342ed67be4514530e50058dda9012f0  homebridge-giv-iog-local-4.2.0-beta.2.tgz' | sha256sum --check
       - name: Publish beta with trusted publishing
         if: startsWith(github.ref, 'refs/tags/')
-        run: npm publish homebridge-giv-iog-local-4.2.0-beta.1.tgz --access public --tag beta --provenance
+        run: npm publish homebridge-giv-iog-local-4.2.0-beta.2.tgz --access public --tag beta --provenance

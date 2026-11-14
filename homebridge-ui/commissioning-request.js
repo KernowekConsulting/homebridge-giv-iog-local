@@ -1,7 +1,8 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-const {files,load,save,signature}=require('../lib/marstek/commissioning');
-function enqueue(storage,action,now=Date.now()){
+const build=require('../lib/marstek/build-profile');
+function enqueue(storage,action,now=Date.now(),transport=build.transport){
+ const {files,load,save,signature}=require(transport==='local-api'?'../lib/marstek/local-api-commissioning':'../lib/marstek/commissioning');
  if(!['check','commission','cancel'].includes(action))throw Error('Unknown setup action');
  const config=JSON.parse(fs.readFileSync(path.join(storage,'config.json'))).platforms?.find(p=>p.platform==='GivHomeModbus');
  if(!config||config.marstekIntegrationEnabled!==true)throw Error('Enable Marstek, save and restart first.');

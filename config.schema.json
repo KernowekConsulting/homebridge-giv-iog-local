@@ -1178,7 +1178,7 @@
         "type": "array",
         "default": [],
         "maxItems": 4,
-        "description": "Optional local monitoring. No Marstek control or automatic export is enabled.",
+        "description": "Connect your Venus for battery readings and the controls you enable below.",
         "items": {
           "type": "object",
           "required": [
@@ -1187,7 +1187,7 @@
           ],
           "properties": {
             "enabled": {
-              "title": "Enable monitoring",
+              "title": "Use this Venus",
               "type": "boolean",
               "default": true
             },
@@ -1195,7 +1195,8 @@
               "title": "Permanent battery ID",
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,48}$",
-              "description": "Choose once, for example garage-venus. Keep this ID when the IP address changes."
+              "description": "Choose once, for example garage-venus. Keep this ID when the IP address changes.",
+              "default": "venus-1"
             },
             "name": {
               "title": "Apple Home name",
@@ -1266,12 +1267,12 @@
               "description": "Required for a configured discharge ceiling above 800 W. This records your confirmation; it does not verify or change the device setting."
             },
             "maxChargeW": {
-              "title": "Maximum Marstek charging power (W)",
+              "title": "Charging limit (W)",
               "type": "integer",
               "default": 2500,
               "minimum": 0,
               "maximum": 2500,
-              "description": "Separate charging ceiling for simulations. Confirm actual device capability during commissioning; the 800 W output default is not used as a charging specification."
+              "description": "The maximum charging power GivHome may request from this Venus. This is separate from its discharge limit."
             },
             "dischargeLimitW": {
               "title": "Venus output limit",
@@ -1362,7 +1363,7 @@
         "title": "Include Marstek in overnight charging plans",
         "type": "boolean",
         "default": true,
-        "description": "Shadow plans use the existing cheap hours and Night Target. Disabling Cheap Overnight above also disables this plan."
+        "description": "Charges Venus during your existing cheap hours, using Night Target. Switching off Cheap Overnight above also stops this plan."
       },
       "marstekAutomationHold": {
         "title": "Pause Venus automation",
@@ -1374,7 +1375,7 @@
         "type": "boolean",
         "title": "Combined battery target tiles (shadow preview)",
         "default": false,
-        "description": "Replaces timed tiles with combined SOC and Charge to / Export down to percentage dimmers. Records proposals only; these controls do not charge or export physical batteries."
+        "description": "Shows capacity-weighted Battery SOC and combined Charge To / Export To targets. Physical actions require battery control and a successful battery check."
       },
       "marstekSiteImportLimitW": {
         "type": "integer",
@@ -1422,7 +1423,15 @@
         "title": "Enable battery control",
         "type": "boolean",
         "default": false,
-        "description": "Runs your selected battery controls after the one-time connection and battery checks below have passed."
+        "description": "GivHome takes control of Venus after its battery check passes. It establishes Passive mode before running your plans; native Manual schedules do not run while GivHome holds that mode."
+      },
+      "marstekLocalApiPort": {
+        "type": "integer",
+        "title": "Venus Local API port",
+        "default": 30000,
+        "minimum": 1,
+        "maximum": 65535,
+        "description": "Use the Local API port shown in the Marstek app. Usually 30000."
       }
     },
     "required": [
@@ -1974,7 +1983,7 @@
       "title": "Marstek Integration",
       "expandable": true,
       "expanded": false,
-      "description": "Add a Marstek Venus battery alongside GivHome.",
+      "description": "Add Venus to your GivHome controls. GivHome checks its identity and takes ownership after the battery check passes.",
       "items": [
         "marstekIntegrationEnabled",
         {
@@ -1983,6 +1992,7 @@
             "functionBody": "return model.marstekIntegrationEnabled === true;"
           },
           "items": [
+            "marstekLocalApiPort",
             {
               "type": "fieldset",
               "title": "GivEnergy Gateway",
@@ -1996,24 +2006,14 @@
               "key": "marstekDevices",
               "title": "{{ value.name || \"Venus battery\" }}",
               "items": [
-                "marstekDevices[].enabled",
-                "marstekDevices[].id",
-                "marstekDevices[].name",
-                "marstekDevices[].host",
-                "marstekDevices[].dischargeLimitW",
-                "marstekDevices[].maxChargeW",
                 {
-                  "type": "fieldset",
-                  "title": "Connection and readings",
-                  "expandable": true,
-                  "expanded": false,
+                  "type": "div",
                   "items": [
-                    "marstekDevices[].port",
-                    "marstekDevices[].unitId",
-                    "marstekDevices[].pollIntervalSeconds",
-                    "marstekDevices[].staleAfterSeconds",
-                    "marstekDevices[].timeoutMs",
-                    "marstekDevices[].thresholdW"
+                    "marstekDevices[].enabled",
+                    "marstekDevices[].name",
+                    "marstekDevices[].host",
+                    "marstekDevices[].dischargeLimitW",
+                    "marstekDevices[].maxChargeW"
                   ]
                 }
               ]

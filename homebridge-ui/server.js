@@ -12,7 +12,7 @@ async function loadServerClass() {
     });
     this.onRequest('/marstek/status',async()=>{const fs=require('node:fs'),path=require('node:path');let record;try{record=JSON.parse(fs.readFileSync(path.join(this.homebridgeStoragePath,'givhome-site-preview/status.json')));}catch{}if(record&&Date.now()-record.at<=10000&&record.at<=Date.now()&&typeof record.title==='string')return {title:record.title,detail:record.detail};return require('../lib/marstek/user-status').userStatus(null);});
     this.onRequest('/marstek/commissioning-status',async()=>{
-      const {files,load}=require('../lib/marstek/commissioning');const state=load(files(this.homebridgeStoragePath).status);
+      const {files,load}=require(require('../lib/marstek/build-profile').transport==='local-api'?'../lib/marstek/local-api-commissioning':'../lib/marstek/commissioning');const state=load(files(this.homebridgeStoragePath).status);
       if(!state||Date.now()-(state.heartbeatAt||0)>30000)return {title:'Save and restart first',detail:'Save your Marstek settings and restart Homebridge, then check the connections.',offline:true};
       return state;
     });

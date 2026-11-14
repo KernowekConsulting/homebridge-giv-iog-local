@@ -33,3 +33,13 @@ During setup, normal coordinated actions are suspended. Interrupted checks are r
 A commissioning result does not prove the Gateway covers every electrical branch, or enforce a hard 6 kW export limit. That wiring boundary needs installation confirmation. The existing AIO/PV export-limit caveat remains. Software can request Pause on lost evidence while it is running and connected; no claim is made that a stopped Pi or unreachable battery can deliver that command. A device-side watchdog is still unqualified.
 
 The module's Modbus identity/control registers are informed by the partially validated ViperRNMC Venus E v3 map. Passing the checks validates the tested behaviours for this device/firmware; it does not turn that map into an official manufacturer guarantee.
+
+### Private timed-control iteration — 13 November 2026
+
+GivHome asks for your Venus IP address and Local API port. No Home Assistant device ID is needed. GivHome checks the battery identity returned by the device. Reserve its IP address in your router.
+
+When Venus control is enabled and the battery check has passed, GivHome takes ownership by establishing Passive mode at zero power before a scheduled charging action. Acknowledgement alone is not enough: the battery must report the expected mode and power. Normal completion leaves Venus under GivHome control; it does not restore Manual schedules automatically.
+
+Cheap Overnight and IOG charging use bounded timed actions. GivHome checks progress every eight seconds, retries uncertain delivery with read-back checks, and keeps the original action end time. A lost response does not extend the charging period. Grace Period protection is included in the existing IOG protected window. Charge To and Export To use energy-based duration estimates, corrected by subsequent SOC and site evidence. Export actions remain bounded more tightly than charging actions. Fast household load balancing remains a separate path.
+
+This private beta remains held until its timed charging, stopping and expiry checks pass on the installation. Installing it does not by itself enable Venus automation. The existing AIO-only installation remains supported.

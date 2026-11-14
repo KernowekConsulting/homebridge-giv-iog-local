@@ -1,0 +1,22 @@
+# HomeKit continuity correction — 11 November 2026
+
+The owner reported Export To 53% switching On/Off/No Response and Total SOC remaining No Response until Apple Home was reopened. Live logs show an export acquisition at 09:02:58, followed by verified cleanup at 09:03:05; the saved 53% target remained but its request was cancelled. Code review confirms that a short telemetry gap cancelled the request, while SOC display admission used the same six-second limit as control. Reopening Home is not evidence of the original failure's precise client-side cause.
+
+## Corrected behaviour
+
+- **Control evidence stays strict.** No wider site-data freshness or skew allowance. Invalid or stale data still blocks new power proposals and stops Venus. The later native AIO continuation policy below preserves only an already verified native action within its fixed bound. Qualified transport, current membership, device identity, reserves, IOG protection and stopping checks remain mandatory.
+- **A brief gap pauses the same requested action.** Charge To/Export To can retain their requested On state for at most 30 seconds, with no new power authorised during recovery. An already verified native AIO action may continue under NATIVE_CONTINUITY_20261111.md; Venus stops. At least three strictly advancing fresh pairs spanning six seconds, with no gap over six seconds, are required before reacquisition; Venus stopping must be confirmed and AIO ownership must be either safely retained under its bound or fully restored. The original action deadline is not extended. A recently verified display can admit a pending request, but cannot authorise output.
+- **Off is final.** Off, expiry, restart, IOG pre-emption, changed membership, unqualified identity, operator holds and hard stopping faults cannot resurrect a cancelled export. A stop-unconfirmed fault cannot be downgraded to transient recovery. Targets edited while a request is pending are explicit new requests and still need fresh control evidence. Both iOS dimmer message orders are handled.
+- **Display continuity is independent.** Total SOC retains only a previously verified combined value for at most 90 seconds from its original source timestamp. Republishing does not make it younger. It is not replaced with the AIO percentage or a prediction. Unknown membership or identity invalidates it immediately. A valid SOC tile publishes On=true; Off is not used as a stale-data indicator. After the bounded grace expires, a real communication fault is reported.
+- **Recovery notifies HomeKit.** Fault recovery forces a notification even if the recovered value equals the previous value, and resets the HAP communication status. This addresses a cache/notification failure mode without requiring users to reopen Home; actual iPhone confirmation remains necessary.
+- **Use the newest available pair.** After the Venus read finishes, the runtime takes a new snapshot of the independently collected Gateway cache. It performs no extra hardware read and preserves the observation timestamps. This avoids knowingly planning against a cache copy selected before a newer Gateway observation arrived. Journal records now include both source observation timestamps.
+
+The same implementation is included in the Modbus and Local API candidates. There are no extra Home tiles or engineering settings. The setup status uses plain wording: “Waiting for readings”. An On tile denotes the active requested action, including its short bounded pause; it is not proof of instantaneous energy flow.
+
+## Verification
+
+Tests cover last-value display expiry, immediate identity invalidation, same-value HAP fault recovery, both dimmer message orders, stale acknowledgement without output, physical simulated stopping, bounded recovery, repeated/intermittent observations, target editing, Off, hard-fault precedence and restart. Existing stale-request tests now assert bounded pending intent with zero authorised power, followed by expiry/cancellation, rather than immediate intent deletion. Existing power freshness checks are unchanged.
+
+The live iPhone symptom must be retested after installation. Do not call HomeKit client recovery proved by server-side tests alone. Do not automatically restart the owner's previous 53% export when installing this correction.
+
+The native AIO continuation policy in NATIVE_CONTINUITY_20261111.md supersedes the earlier assumption that every short data gap immediately restores the native AIO schedule.

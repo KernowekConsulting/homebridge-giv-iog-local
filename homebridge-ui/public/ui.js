@@ -58,7 +58,7 @@
         const link = document.createElement('a');link.href=url;link.download='givhome-gateway-check.json';link.click();URL.revokeObjectURL(url);
       };
       form.onChange(async (formData) => {
-        current = formData; if(commissioningUi)commissioningUi.update(current);panel.hidden = commissioningUi?true:current.marstekIntegrationEnabled !== true; settingsRevision++; scheduleStatus(); report = null; buttons[1].disabled = true; reportStatus.textContent = "Settings changed; test again to verify this Gateway.";
+        formData=GivHomeConfigMigration.migrateExistingConfig(formData).config;current = formData; if(commissioningUi)commissioningUi.update(current);panel.hidden = commissioningUi?true:current.marstekIntegrationEnabled !== true; settingsRevision++; scheduleStatus(); report = null; buttons[1].disabled = true; reportStatus.textContent = "Settings changed; test again to verify this Gateway.";
         const merged = [{ ...(passthrough[0] || {}), ...formData }];
         for (let index = 1; index < prepared.length; index += 1) {
           merged.push({ ...(passthrough[index] || {}), ...prepared[index] });

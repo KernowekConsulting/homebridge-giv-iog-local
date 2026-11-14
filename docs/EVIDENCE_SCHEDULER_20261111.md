@@ -1,0 +1,11 @@
+# Evidence scheduler correction — 11 November 2026
+
+The preceding acquisition fix was deployed and its exact189 files verified. It reached native export readback and physical AIO charging around6kW, but measured trials did not sustain export or establish simultaneous Venus charging: Gateway gaps caused correct continuity stops. Do not call that build a full pass. Trials ended with both controls Off, saved targets100/47, no manual intent and verified restoration.
+
+The controller formerly deferred Gateway sampling for entire AIO polls, supervisors and command quiet windows. A short freshness lease cannot coexist reliably with those deliberate multi-second gaps. The enabled Marstek controller now admits Gateway reads into the existing global giv-site broker throughout routine operation; read-only/disabled setups retain their existing deferral rule. There is still one active Giv wire transaction, not a second parallel poller. Gateway work has priority20 over ordinary preparation/read work; owned restoration reads and writes have priority100. A request already on the wire is not pre-empted. Stop and freshness checks remain mandatory.
+
+Meter/unit groups publish atomically after the cycle succeeds. A failed group leaves only the previous complete snapshot, with its original timestamps and normal expiry. Identity errors still invalidate immediately. The collector targets a two-second start-to-start cadence rather than adding two seconds after each completed cycle. No read deadline, freshness/skew allowance, serial check or native power envelope is relaxed.
+
+Both transports receive the same scheduler. GivEnergy-only UI, settings, charge/export methods and normal queue remain unchanged. Optional Marstek restoration priority and pre-send validity are inactive in the GivEnergy-only path. No extra user-facing controls or engineering fields are added.
+
+Source validation includes delayed production-style acquisition, stale-data refusal, Off/IOG pre-emption, ownership-checked cleanup, pre-payload revocation, atomic snapshot publication/failure and restoration priority. Full suites, Node22 and packed-artifact checks accompany the build. Physical success must be reported from measurements separately from command acknowledgement.

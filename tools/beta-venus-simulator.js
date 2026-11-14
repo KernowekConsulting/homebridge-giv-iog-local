@@ -26,7 +26,7 @@ class VenusSim {
   if(a>=30200&&a<30205)return 100;
   return new Map([[30001,Math.round(-this.actual)&65535],[30006,Math.round(this.actual)&65535],[34002,Math.round(this.soc*10)],[35000,220],[32200,2400]]).get(a)??this.reg.get(a);
  }
- valid(a,v){return a===42000?[21930,21947].includes(v):a===42010?v<=2:a===42011?v>=10&&v<=100:a===42020?v<=2500&&v%50===0:a===42021?v<=this.dischargeLimitW&&v%50===0:false;}
+ valid(a,v){return a===42000?[21930,21947].includes(v):a===42010?v<=2:a===42011?(v>=10&&v<=100||v===0&&this.reg.get(42010)===0&&this.reg.get(42020)===0&&this.reg.get(42021)===0):a===42020?v<=2500&&v%50===0:a===42021?v<=this.dischargeLimitW&&v%50===0:false;}
  handle(s,q){
   if(!this.link){s.destroy();return;}const fn=q[7],a=q.readUInt16BE(8),n=q.readUInt16BE(10);let p,exception=0;
   if(q.readUInt16BE(2)!==0||q[6]!==1){s.destroy();return;}
