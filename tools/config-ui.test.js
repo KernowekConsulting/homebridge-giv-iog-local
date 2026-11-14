@@ -160,7 +160,7 @@ test('Custom UI wrapper is packaged, migrates only existing blocks and retains u
   const ui = fs.readFileSync(path.resolve(__dirname, '../homebridge-ui/public/ui.js'), 'utf8');
   assert.match(ui, /blocks\.length > 0/);
   assert.match(ui, /updatePluginConfig\(prepared\)/);
-  assert.match(ui, /createForm\(pluginSchema, prepared\[0\]\)/);
+  assert.match(ui, /createForm\(selected,JSON\.parse/);
   assert.match(ui, /form\.onChange/);
   assert.match(ui, /\.\.\.\(passthrough\[0\]/);
 });

@@ -26,10 +26,10 @@
       // those values, then leave Homebridge's normal outer Save button and
       // restart prompt in control.
       let current = prepared[0];
-      const form = homebridge.createForm(pluginSchema, prepared[0]);
+      let form,marstekSectionActive=false;
       const panel = document.createElement('section');
       panel.hidden = !(current.marstekIntegrationEnabled === true || (current.marstekIntegrationEnabled !== false && current.marstekDevices?.length));
-      panel.className = 'card mt-3 p-3';
+      panel.className = 'card mt-3 p-3 givhome-venus-setup';
       panel.innerHTML = '<h5>Venus Gateway connection</h5><p class="small">Reads the Gateway and checks its serial. No device settings are changed.</p><button type="button" class="btn btn-primary">Test Gateway connection</button><p class="mt-2" role="status" aria-live="polite"></p><button type="button" class="btn btn-secondary" disabled>Download connection report</button>';
       const commissioningUi=typeof window!=='undefined'&&window.GivHomeCommissioning?window.GivHomeCommissioning.mount(current):null;
       if(commissioningUi)panel.hidden=true;else document.body.appendChild(panel);
@@ -57,16 +57,31 @@
         const url = URL.createObjectURL(new Blob([JSON.stringify(redacted, null, 2)], {type:'application/json'}));
         const link = document.createElement('a');link.href=url;link.download='givhome-gateway-check.json';link.click();URL.revokeObjectURL(url);
       };
-      form.onChange(async (formData) => {
-        formData=GivHomeConfigMigration.migrateExistingConfig(formData).config;current = formData; if(commissioningUi)commissioningUi.update(current);panel.hidden = commissioningUi?true:current.marstekIntegrationEnabled !== true; settingsRevision++; scheduleStatus(); report = null; buttons[1].disabled = true; reportStatus.textContent = "Settings changed; test again to verify this Gateway.";
+      const onFormChange = async (formData,{fromMarstek=false}={}) => {
+        if(!fromMarstek){formData={...formData};for(const key of Object.keys({...formData,...current}).filter(k=>k.startsWith('marstek'))){if(Object.hasOwn(current,key))formData[key]=current[key];else delete formData[key];}}
+        formData=GivHomeConfigMigration.migrateExistingConfig(formData).config;current = formData; if(commissioningUi)commissioningUi.update(current);panel.hidden = commissioningUi?true:!marstekSectionActive||current.marstekIntegrationEnabled !== true; settingsRevision++; scheduleStatus(); report = null; buttons[1].disabled = true; reportStatus.textContent = "Settings changed; test again to verify this Gateway.";
         const merged = [{ ...(passthrough[0] || {}), ...formData }];
         for (let index = 1; index < prepared.length; index += 1) {
           merged.push({ ...(passthrough[index] || {}), ...prepared[index] });
         }
         homebridge.disableSaveButton();
         try { await homebridge.updatePluginConfig(merged); }
-        finally { homebridge.enableSaveButton(); }
-      });
+        finally { if(marstekUi.valid())homebridge.enableSaveButton(); }
+      };
+      const tabs=document.getElementById('givhome-settings-tabs'),mainTab=document.getElementById('givhome-main-tab'),marstekTab=document.getElementById('givhome-marstek-tab');
+      const marstekUi=window.GivHomeMarstekSettings.mount(()=>current,onFormChange);
+      const marstekSection=pluginSchema.form.find(section=>section.title==='Marstek Integration');
+      function selectSection(marstek){
+        marstekSectionActive=marstek;
+        form?.end();
+        form=null;
+        if(!marstek){const selected={...pluginSchema,form:pluginSchema.form.filter(section=>section!==marstekSection)};form=homebridge.createForm(selected,JSON.parse(JSON.stringify(current)));form.onChange(onFormChange);}
+        marstekUi.setVisible(marstek);
+        for(const [button,active] of [[mainTab,!marstek],[marstekTab,marstek]]){button.className=active?'btn btn-primary':'btn btn-secondary';button.setAttribute('aria-pressed',String(active));}
+        commissioningUi?.setSectionActive(marstek);
+        panel.hidden=Boolean(commissioningUi)||!marstek||current.marstekIntegrationEnabled!==true;scheduleStatus();
+      }
+      mainTab.onclick=()=>selectSection(false);marstekTab.onclick=()=>selectSection(true);tabs.hidden=false;selectSection(false);
     } catch (error) {
       status.textContent = 'GivHome could not safely prepare the configuration form. Close this window without saving and try again.';
       homebridge.disableSaveButton();
