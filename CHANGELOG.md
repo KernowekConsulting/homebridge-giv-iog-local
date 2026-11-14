@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.2.0-beta.4
+
+Beta Marstek Addon. Not for public use
+
 ## 4.2.0-beta.3
 
 Beta Marstek Addon. Not for public use

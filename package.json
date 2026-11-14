@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.2.0-beta.3",
+  "version": "4.2.0-beta.4",
   "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
@@ -35,7 +35,7 @@
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "scripts": {
-    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js tools/control-lifecycle.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js && node --test tools/config-ui.test.js tools/venus-settings-navigation.test.js tools/marstek-settings-ui.test.js && npm run test:ce-ac && npm run test:marstek && npm run test:gateway-meter && npm run test:marstek-ui && npm run test:charging && npm run test:site && npm run test:qualification && npm run test:sim67 && npm run test:household && npm run test:consolidation && node --test tools/responsive.test.js && npm run test:beta && npm run test:commissioning && npm run test:local-api && npm run test:priority && node --test tools/eco-recovery.test.js tools/continuity-progress.test.js && npm run test:homekit-continuity && npm run test:acquisition && npm run test:native-continuity && node --test tools/scheduled-evidence.test.js && node --test tools/plan-a-evidence.test.js && node --test tools/passive-aio-observation.test.js tools/wifi-continuity.test.js tools/api-continuity-budget.test.js tools/api-wifi-homekit-journey.test.js && node --test tools/timed-action.test.js tools/venus-rate.test.js && node --test tools/reliability-runtime.test.js && node --test tools/reliability-udp-journey.test.js",
+    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js tools/control-lifecycle.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js && node --test tools/config-ui.test.js tools/venus-settings-navigation.test.js tools/marstek-settings-ui.test.js && npm run test:ce-ac && npm run test:marstek && npm run test:gateway-meter && npm run test:marstek-ui && npm run test:charging && npm run test:site && npm run test:qualification && npm run test:sim67 && npm run test:household && npm run test:consolidation && node --test tools/responsive.test.js && npm run test:beta && npm run test:commissioning && npm run test:local-api && npm run test:priority && node --test tools/eco-recovery.test.js tools/continuity-progress.test.js && npm run test:homekit-continuity && npm run test:acquisition && npm run test:native-continuity && node --test tools/scheduled-evidence.test.js && node --test tools/plan-a-evidence.test.js && node --test tools/passive-aio-observation.test.js tools/wifi-continuity.test.js tools/api-continuity-budget.test.js tools/api-wifi-homekit-journey.test.js && node --test tools/timed-action.test.js tools/venus-rate.test.js tools/eco-balance.test.js && node --test tools/reliability-runtime.test.js && node --test tools/reliability-udp-journey.test.js",
     "verify": "npm test",
     "test:hap": "node --test tools/charge-target-hap.test.js",
     "pack:dry": "npm pack --dry-run",
@@ -154,7 +154,8 @@
     "tools/reliability-udp-journey.test.js",
     "tools/venus-settings-navigation.test.js",
     "tools/marstek-settings-ui.test.js",
-    "tools/venus-rate.test.js"
+    "tools/venus-rate.test.js",
+    "tools/eco-balance.test.js"
   ],
   "displayName": "GivHome",
   "homepage": "https://homebridge.givhome.kernowekconsulting.co.uk",
