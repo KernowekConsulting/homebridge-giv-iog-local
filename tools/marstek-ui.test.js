@@ -48,13 +48,13 @@ test('higher-limit result is explicitly configured rather than a factory default
  assert.equal(row.venusDischargeW,1163);assert.equal(row.aioDischargeW,37);
 });
 function uiHarness(){
- const fs=require('node:fs'),vm=require('node:vm');let ready,change,resolveRequest;
+ const fs=require('node:fs'),vm=require('node:vm');let ready,change,resolveRequest,nativeChange;
  const status={},buttons=[{},{}],reportStatus={},panel={setAttribute(){},appendChild(){},querySelectorAll:()=>buttons,querySelector:()=>reportStatus};
- const homebridge={addEventListener:(_name,fn)=>ready=fn,getPluginConfig:async()=>[{marstekGatewayHost:'127.0.0.1',marstekGatewaySerial:'GW2412G068'}],getPluginConfigSchema:async()=>schema,
-  updatePluginConfig:async()=>{},createForm:()=>({onChange:fn=>change=fn}),request:()=>new Promise(resolve=>resolveRequest=resolve),disableSaveButton(){},enableSaveButton(){},toast:{error:assert.fail}};
- const document={getElementById:()=>status,createElement:()=>panel,body:{appendChild(){}}};
- vm.runInNewContext(fs.readFileSync(require.resolve('../homebridge-ui/public/ui.js'),'utf8'),{homebridge,document,GivHomeConfigMigration:{migrateExistingConfig},Date,Set,Object,Array,Blob,URL,setInterval:()=>1,clearInterval:()=>{}});
- return {ready:()=>ready(),edit:data=>change(data),buttons,reportStatus,resolve:value=>resolveRequest(value)};
+ const homebridge={addEventListener:(_name,fn)=>ready=fn,getPluginConfig:async()=>[{marstekIntegrationEnabled:true,marstekGatewayHost:'127.0.0.1',marstekGatewaySerial:'GW2412G068'}],getPluginConfigSchema:async()=>schema,
+  updatePluginConfig:async()=>{},createForm:()=>({onChange:fn=>change=fn,end(){}}),request:route=>route==='/marstek/gateway-test'?new Promise(resolve=>resolveRequest=resolve):Promise.resolve({title:'Ready',detail:'Monitoring'}),disableSaveButton(){},enableSaveButton(){},toast:{error:assert.fail}};
+ const tabs=Object.fromEntries(['givhome-config-status','givhome-settings-tabs','givhome-main-tab','givhome-marstek-tab'].map(id=>[id,{...status,setAttribute(){}}]));const window={addEventListener(){},GivHomeMarstekSettings:{mount:(_get,fn)=>{nativeChange=fn;return {setVisible(){},valid:()=>true};}}};const document={getElementById:id=>tabs[id],createElement:()=>panel,body:{appendChild(){}}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../homebridge-ui/public/ui.js'),'utf8'),{window,homebridge,document,GivHomeConfigMigration:{migrateExistingConfig},Date,Set,Object,Array,Blob,URL,setInterval:()=>1,clearInterval:()=>{}});
+ return {ready:async()=>{await ready();tabs['givhome-marstek-tab'].onclick();},edit:data=>nativeChange({...data,marstekIntegrationEnabled:true},{fromMarstek:true}),buttons,reportStatus,resolve:value=>resolveRequest(value)};
 }
 test('editing Gateway identity during a pending UI check cannot display stale success',async()=>{
  const ui=uiHarness();await ui.ready();const pending=ui.buttons[0].onclick();await ui.edit({marstekGatewayHost:'127.0.0.2',marstekGatewaySerial:'GW00000000'});
