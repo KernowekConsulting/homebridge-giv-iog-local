@@ -211,3 +211,68 @@ test('production transport identity reader and every CE register read reject wro
   serial = 'CE00000000';
   await assert.rejects(P.prototype.readHoldingRegisters.call(f.p, 94, 3), /identity does not match/);
 });
+
+for (const arm of [212, 214]) test(`CE 0x3001 firmware ${arm}: Charge 30m preserves enabled empty prestate`, async t => {
+  const f = fixture(t, { serial: arm === 212 ? 'CE2237G099' : 'CE2122G250',
+    now: '2026-11-03T20:00:00Z', config: baseConfig,
+    state: { 0: 0x3001, 19: arm, 21: arm, 20: 0, 94: 0, 95: 0, 96: 1, 111: 50, 116: 100 } });
+  await f.p.startTimedChargeCommand({ kind: 'charge30', displayName: 'Charge 30m', minutes: 30 });
+  assert.deepEqual(f.writes.map(([r,v]) => [r,v]), [[96,0],[111,50],[94,2000],[95,2030],[96,1]]);
+  await f.restart().cleanupApplianceCommandFamily('charge', 'user stop');
+  assert.deepEqual([94,95,96,111,116].map(r => f.registers[r]), [0,0,1,50,100]);
+});
+
+test('CE IOG pause uses HR318 alone, shortens without a rewrite, and restores at the amended end', async t => {
+  const f = device(t, { iogHomeBatteryProtectionMode: 'pauseDischarge' });
+  const read = f.p.readHoldingRegisters;
+  f.p.readHoldingRegisters = async (r,n,label) => {
+    if (r <= 319 && r+n > 319) throw Error('Timed pause not available');
+    return read(r,n,label);
+  };
+  slot(f.p);
+  await f.p.applyApplianceAutomation();
+  const end = new Date('2026-11-03T20:15:00Z');
+  f.p.octopusState.dispatches[0].end = end;
+  await f.p.applyApplianceAutomation();
+  assert.equal(f.p.currentControlOwner('pause').endAtMs, +end);
+  assert.deepEqual(f.writes.map(([r,v]) => [r,v]), [[318,2]]);
+  t.mock.timers.tick(16*60000);
+  await f.p.applyApplianceAutomation();
+  assert.deepEqual(f.writes.map(([r,v]) => [r,v]), [[318,2],[318,0]]);
+});
+
+test('CE IOG records pause loss and preserves the changed mode across restart', async t => {
+  const f = device(t, { iogHomeBatteryProtectionMode: 'pauseDischarge' });
+  slot(f.p);
+  await f.p.applyApplianceAutomation();
+  f.registers[318] = 1;
+  await f.p.applyApplianceAutomation();
+  assert.equal(f.p.autoChargeActive,false);
+  assert.equal(f.p.currentControlOwner('pause'),null);
+  const restarted=f.restart();slot(restarted);
+  await restarted.applyApplianceAutomation();
+  assert.deepEqual(f.writes.map(([r,v]) => [r,v]),[[318,2]]);
+  assert.equal(f.registers[318],1);
+});
+
+test('CE IOG preserves a pre-existing incompatible pause without reporting protection', async t => {
+  const f = device(t, { iogHomeBatteryProtectionMode: 'pauseDischarge' }, { 318:1 });
+  slot(f.p);
+  await f.p.applyApplianceAutomation();
+  assert.deepEqual(f.writes,[]);
+  assert.equal(f.p.currentControlOwner('pause'),null);
+  assert.ok(!f.p.autoChargeActive);
+});
+
+for (const family of ['charge', 'export']) test(`CE IOG does not take over an owned manual ${family}`, async t => {
+  const f = device(t, { iogHomeBatteryProtectionMode: 'pauseDischarge' });
+  if (family === 'charge') await f.p.startTimedChargeCommand({ minutes:30, displayName:'Charge 30m' });
+  else await f.p.startTimedExportCommand({ minutes:30, displayName:'Export 30m' });
+  const owner = f.p.currentControlOwner(family);
+  const writes = f.writes.length;
+  slot(f.p);
+  await f.p.applyApplianceAutomation();
+  assert.equal(f.writes.length,writes);
+  assert.equal(f.p.currentControlOwner(family).id,owner.id);
+  assert.equal(f.p.currentControlOwner('pause'),null);
+});

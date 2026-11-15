@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.2.0-beta.7
+
+Beta Marstek Addon. Not for public use
+except IH
+
+## 4.2.0-beta.6
+
+Beta Marstek Addon. Not for public use
+
+## 4.2.0-beta.5
+
+Beta Marstek Addon. Not for public use
+
 ## 4.2.0-beta.4
 
 Beta Marstek Addon. Not for public use

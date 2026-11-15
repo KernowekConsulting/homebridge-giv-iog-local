@@ -141,8 +141,8 @@ class GivHomeModbusPlatform {
     if(this.config.marstekSitePreviewEnabled)this.config={...this.config,enableTimedChargeTiles:false,enableTimedExportTiles:false};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.2.0-beta.4',
-      stage: 'GivHome 4.2.0-beta.4'
+      version: '4.2.0-beta.7',
+      stage: 'GivHome 4.2.0-beta.7'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -2639,17 +2639,44 @@ class GivHomeModbusPlatform {
     return { HR318: mode[0], HR319: times[0], HR320: times[1] };
   }
 
+  async verifyOwnedCeIogPause(end, { dischargeObserved = false } = {}) {
+    const owner = this.currentControlOwner('pause');
+    if (owner?.source !== 'Intelligent Octopus Go Home Battery Protection' || owner.phase !== 'active') return false;
+    await this.verifyControlSupport('pause');
+    const { HR318 } = await this.readPausePrestate();
+    if (HR318 !== owner.expected[318]) {
+      // A mode change has no ownership marker on the inverter. Preserve it.
+      // Suppress reacquisition for this dispatch, including after restart.
+      this.rememberStoppedOccurrence(owner.occurrence);
+      this.retireControlOwner('pause', owner.id, 'superseded');
+      this.log.warn('GivHome CE IOG protection lost: HR318=%s expected=%s action=preserve-observed-mode', HR318, owner.expected[318]);
+      return false;
+    }
+    if (owner.endAtMs !== end.getTime()) {
+      owner.endAtMs = end.getTime();
+      owner.occurrence = this.controlOccurrence(owner.source, new Date(), end);
+      this.saveControlLedger();
+      this.autoChargeProtectedUntilMs = owner.endAtMs;
+    }
+    if (dischargeObserved) this.log.warn('GivHome CE IOG HR318 verified but battery discharge is still reported; effective protection unconfirmed');
+    return !dischargeObserved;
+  }
+
   async startIogPauseProtectionCommand(options = {}) {
     await this.verifyControlSupport('pause');
+    if (this.controlProfile.kind === 'ce-ac-coupled' && (this.currentControlOwner('charge') || this.currentControlOwner('export'))) {
+      this.log.warn('GivHome CE IOG pause deferred: an owned charge or export is still active');
+      return false;
+    }
     const mode = String(options.mode || this.applianceControl.iogHomeBatteryProtectionMode || 'pauseDischarge');
     const modeText = this.applianceControl.iogHomeBatteryProtectionModeText || mode;
     const pauseModeValue = Number(this.applianceControl.iogHomeBatteryProtectionPauseValue || 0);
     if (![1, 2, 3].includes(pauseModeValue)) throw new Error(`pause protection refused: unsupported pause mode ${mode}`);
     const end = options.endDate instanceof Date ? options.endDate : null;
     const original = await this.readPausePrestate();
-    if ([1, 2, 3].includes(Number(original.HR318)) && Number(original.HR318) !== pauseModeValue && this.manualPauseIntent) {
+    if ([1, 2, 3].includes(Number(original.HR318)) && Number(original.HR318) !== pauseModeValue && (this.manualPauseIntent || this.controlProfile.kind === 'ce-ac-coupled' && !this.currentControlOwner('pause'))) {
       this.log.warn('GivHome Intelligent Octopus Go pause protection preserved manual pause: requestedMode=%s currentHR318=%s manualPauseIntent=%s source=iog-home-battery-protection', modeText, original.HR318, this.manualPauseIntent);
-      return;
+      return false;
     }
     await this.beginControlAction('pause', original, { 318: pauseModeValue }, { source: options.label || 'Intelligent Octopus Go Home Battery Protection', end });
     this.log.warn('GivHome Intelligent Octopus Go pause protection start executing: mode=%s HR318=%s writePlan=HR318-only willNotWrite=HR319,HR320 currentHR318=%s currentHR319=%s currentHR320=%s source=iog-home-battery-protection automaticMutationPath=%s', modeText, pauseModeValue, original.HR318, original.HR319, original.HR320, this.applianceControl.automaticMutationPath);
@@ -2659,7 +2686,8 @@ class GivHomeModbusPlatform {
       throw new Error(`pause protection readback mismatch: HR318=${post.HR318} expected=${pauseModeValue} HR319=${post.HR319} HR320=${post.HR320}`);
     }
     this.finishControlActionStart('pause');
-    this.log.warn('GivHome Intelligent Octopus Go pause protection active: mode=%s HR318=%s HR319=%s HR320=%s protectedUntil=%s slotPolicy=reactive-live-Octopus-poll writePlan=HR318-only returnToPreviousPauseStateAfterWindow=yes', modeText, post.HR318, post.HR319, post.HR320, end ? dateToDisplayHmm(end) : 'live-poll');
+    this.log.warn('GivHome Intelligent Octopus Go pause register verified: mode=%s HR318=%s HR319=%s HR320=%s protectedUntil=%s slotPolicy=reactive-live-Octopus-poll writePlan=HR318-only returnToPreviousPauseStateAfterWindow=yes', modeText, post.HR318, post.HR319, post.HR320, end ? dateToDisplayHmm(end) : 'live-poll');
+    return true;
   }
 
   async cleanupPauseFromSnapshot(snapshot, reason) {
@@ -3131,6 +3159,12 @@ class GivHomeModbusPlatform {
       return;
     }
 
+    if (smartProtectionActive && isIogAutoPause && this.isCeAcCoupledProfile()) {
+      await this.withManualChargeTransportGate('GivHome CE IOG pause verification', () =>
+        this.verifyOwnedCeIogPause(iogProtectedEnd, { dischargeObserved: repairBecauseDischarging }));
+      return;
+    }
+
     if (smartProtectionActive && (!(isIogAutoCharge || isIogAutoPause) || protectedUntilChanged || repairBecauseDischarging)) {
       const carePlan = { active: false, reason: 'home-battery-protection-not-battery-care' };
       const trigger = !isIogAutoProtection ? 'smart-slot-home-battery-protection-start' : protectedUntilChanged ? 'smart-slot-home-battery-protection-extend' : 'smart-slot-home-battery-protection-repair-discharge';
@@ -3144,9 +3178,10 @@ class GivHomeModbusPlatform {
         });
         this.autoChargeLabel = 'Intelligent Octopus Go Home Battery Protection';
       } else {
-        await this.withManualChargeTransportGate('GivHome evidence smart-slot home-battery protection pause-mode enforce', async () => {
-          await this.startIogPauseProtectionCommand({ mode: protectionMode, automatic: true, label: 'Intelligent Octopus Go Home Battery Protection', startDate: now, endDate: iogProtectedEnd, minutes });
+        const verified = await this.withManualChargeTransportGate('GivHome evidence smart-slot home-battery protection pause-mode enforce', async () => {
+          return this.startIogPauseProtectionCommand({ mode: protectionMode, automatic: true, label: 'Intelligent Octopus Go Home Battery Protection', startDate: now, endDate: iogProtectedEnd, minutes });
         });
+        if (verified === false && this.isCeAcCoupledProfile()) return;
         this.autoChargeLabel = 'Intelligent Octopus Go Home Battery Protection Pause';
       }
       this.autoChargeActive = true;

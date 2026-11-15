@@ -32,3 +32,76 @@ test('API setup refreshes an old endpoint status without reusing its commissioni
  const config={marstekGatewaySerial:'GW2412G068',marstekGatewayHost:'127.0.0.1',marstekDevices:[{id:'v',host:'127.0.0.1'}]},paths=files(dir),oldCertificate={signature:'old-endpoint',transport:'local-api'};save(paths.status,{signature:'old-endpoint',heartbeatAt:Date.now(),ready:true});save(paths.certificate,oldCertificate);
  const c=new LocalApiCommissioning(config,dir);c.start();await c.stop();const status=load(paths.status);assert.equal(status.signature,signature(config));assert.equal(status.ready,false);assert.equal(status.title,'Ready to check');assert.deepEqual(load(paths.certificate),oldCertificate);
 });
+
+test('timed write and readback share one UDP queue turn ahead of routine traffic',async t=>{
+ const {sim,client}=await rig(t);
+ await client.getDevice();
+ const receive=sim.receive.bind(sim);
+ let poll;
+ sim.receive=(bytes,peer)=>{
+  if(JSON.parse(bytes).method==='ES.SetMode')poll=client.getStatus();
+  receive(bytes,peer);
+ };
+ const action=new (require('../lib/marstek/timed-action').TimedAction)(client);
+ const result=await action.set(500,Date.now()+60000);
+ await poll;
+ assert.equal(result.status,'effect-confirmed');
+ assert.deepEqual(sim.requests.map(q=>q.method),['Marstek.GetDevice','ES.SetMode','ES.GetMode','ES.GetStatus']);
+});
+
+test('monitor retries only a timeout and tiers full identity rechecks',async()=>{
+ const {LocalApiMonitor}=require('../lib/marstek/local-api-monitor');
+ let now=1000000,drop=true,devices=0;
+ const windows=[];
+ const client={
+  async getDevice(){devices++;return {src:'venus',result:{device:'Venus E 3.0',ble_mac:'12:34:56:78:9a:bc',ver:144},sentAtMs:now};},
+  async getMode({timeoutMs}){
+   windows.push(timeoutMs);
+   if(drop){drop=false;now+=3000;throw Object.assign(Error('timeout'),{code:'ETIMEDOUT'});}
+   return {result:{mode:'Passive',bat_soc:80,ongrid_power:200},sentAtMs:now};
+  }
+ };
+ const monitor=new LocalApiMonitor({staleAfterSeconds:30},{now:()=>now,clientFactory:()=>client});
+ const first=await monitor.pollOnce();
+ assert.equal(first.sample.model.observedAtMs,1003000);
+ assert.deepEqual(windows,[3000,5000]);
+ now+=60000;
+ await monitor.pollOnce();
+ assert.equal(devices,1);
+ now+=240000;
+ await monitor.pollOnce();
+ assert.equal(devices,2);
+ assert.equal(monitor.state().sample.model.identityAtMs,now);
+});
+
+test('revoking an in-flight timed write frees the queue without waiting for its lost reply',async t=>{
+ const {sim,client}=await rig(t,{dropSetReply:true});
+ let valid=true;
+ const receive=sim.receive.bind(sim);
+ sim.receive=(bytes,peer)=>{
+  receive(bytes,peer);
+  if(JSON.parse(bytes).method==='ES.SetMode')valid=false;
+ };
+ const result=await client.timedPowerExchange(100,{endAtMs:Date.now()+10000,valid:()=>valid});
+ assert.match(result.writeError.message,/revoked/);
+ assert.equal(result.writeError.sent,true);
+ assert.equal(result.readback,undefined);
+ assert.equal((await client.getMode()).result.ongrid_power,100);
+ assert(client.session.trace.some(e=>e.outcome==='Venus exchange revoked'));
+});
+
+test('fresh command readback feeds one monitor cycle at its original timestamp',async t=>{
+ const {sim,client}=await rig(t);
+ const {LocalApiMonitor}=require('../lib/marstek/local-api-monitor');
+ const monitor=new LocalApiMonitor({staleAfterSeconds:30},{clientFactory:()=>client});
+ await monitor.pollOnce();
+ await new Promise(resolve=>setTimeout(resolve,5));
+ const result=await client.timedPowerExchange(100,{endAtMs:Date.now()+10000,valid:()=>true,reuseReadback:true});
+ const n=sim.requests.length;
+ const state=await monitor.pollOnce();
+ assert.equal(sim.requests.length,n);
+ assert.equal(state.sample.model.observedAtMs,result.readback.sentAtMs);
+ assert.equal(state.sample.model.acSignedW,100);
+ await monitor.pollOnce();
+ assert.equal(sim.requests.length,n+1);
+});
