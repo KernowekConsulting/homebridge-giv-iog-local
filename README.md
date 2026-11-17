@@ -1,13 +1,8 @@
-# GivHome 4.2.0-beta.1 — Marstek Venus edition
+# GivHome for Homebridge
 
-Beta Marstek Addon. Not for public use
+GivHome brings compatible GivEnergy systems into Apple Home. You can also add a Marstek Venus E 3.0 alongside a compatible GivEnergy All in One and Gateway.
 
-Start with [Venus beta setup](docs/VENUS_BETA.md). Read the [one-page explainer](docs/GivHome-Marstek-Venus-Interoperability-Progress.pdf).
-
-This build retains the 4.1.3 GivEnergy controls and adds an optional Marstek Integration section at the bottom of settings. Commissioning is built in: the Homebridge settings page checks connections and guides a short 100 W battery test. Physical controls become available after successful checks for the configured device and firmware.
-
-
-GivHome brings compatible GivEnergy battery and inverter systems directly into Apple Home.
+Read the [4.2.0 release notes](RELEASE_NOTES.md) or [set up Marstek Venus E 3.0](docs/MARSTEK_SETUP.md).
 
 It talks locally to the inverter over Modbus TCP, brings Octopus Energy information into the decisions that matter, keeps local energy history and can forecast tomorrow's solar generation.
 
@@ -27,7 +22,7 @@ Those two ideas shaped GivHome v4: **understand what the inverter is really doin
 
 ## Version and installation
 
-This is **4.1.3** of `homebridge-giv-iog-local`. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so an upgrade can reuse cached accessories rather than creating replacements. Read the release notes for Emergency Stop, Solar-Aware Cheap Overnight, action ownership and remaining model/firmware limits.
+This is **4.2.0** of `homebridge-giv-iog-local`. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so an upgrade can reuse cached accessories rather than creating replacements. Read the release notes for Emergency Stop, Solar-Aware Cheap Overnight, action ownership and remaining model/firmware limits.
 
 The optional [local learning foundation](docs/SOLAR_OBSERVATION.md) begins observing this installation for future Automatic Solar-Aware Cheap Overnight. It does not choose targets or enable automatic charging. Learning is enabled by default and can be disabled in Plugin Config. Its data stays on your device and is not sent to the developer.
 

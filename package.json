@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.2.0-beta.7",
+  "version": "4.2.0",
   "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
@@ -41,7 +41,7 @@
     "pack:dry": "npm pack --dry-run",
     "test:observation": "TZ=Europe/London node --test tools/solar-observation.test.js",
     "test:observation:stress": "node --expose-gc tools/solar-observation-stress.js",
-    "prepublishOnly": "node tools/verify-observation-qualification.js --beta-publication && npm test",
+    "prepublishOnly": "node tools/verify-observation-qualification.js && npm test",
     "test:ce-ac": "TZ=Europe/London node --test tools/ce-ac-integrated.test.js tools/control-capabilities.test.js",
     "test:marstek": "node --test tools/marstek.test.js tools/marstek-hap.test.js",
     "marstek:simulate": "node tools/marstek-simulator.js",
@@ -155,7 +155,9 @@
     "tools/venus-settings-navigation.test.js",
     "tools/marstek-settings-ui.test.js",
     "tools/venus-rate.test.js",
-    "tools/eco-balance.test.js"
+    "tools/eco-balance.test.js",
+    "docs/MARSTEK_SETUP.md",
+    "docs/maintainer/VALIDATION_4.2.0.md"
   ],
   "displayName": "GivHome",
   "homepage": "https://homebridge.givhome.kernowekconsulting.co.uk",
@@ -177,6 +179,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "beta"
+    "tag": "latest"
   }
 }

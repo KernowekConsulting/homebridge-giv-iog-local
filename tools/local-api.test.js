@@ -105,3 +105,31 @@ test('fresh command readback feeds one monitor cycle at its original timestamp',
  await monitor.pollOnce();
  assert.equal(sim.requests.length,n+1);
 });
+
+test('firmware rename keeps the same battery readable and holds writes until requalified',async t=>{
+ const {sim,client}=await rig(t);
+ const {LocalApiMonitor}=require('../lib/marstek/local-api-monitor');
+ const monitor=new LocalApiMonitor({host:'127.0.0.1',staleAfterSeconds:30},{port:sim.port,clientFactory:()=>client});
+ const before=await monitor.pollOnce();
+ assert.equal(before.sample.model.firmware.display,'144');
+ sim.src='VNSE3-0-ccc837a1b440';sim.version=151;
+ await monitor.pollOnce();
+ const after=await monitor.pollOnce();
+ assert.equal(after.failures,0);
+ assert.equal(after.sample.model.socPercent,60);
+ assert.equal(after.sample.model.firmware.display,'151');
+ await assert.rejects(client.setTimedPower(100,{endAtMs:Date.now()+5000,valid:()=>true}),/revoked/);
+ assert.equal(sim.requests.filter(r=>r.method==='ES.SetMode').length,0);
+ client.releaseWrites();
+ await client.setTimedPower(100,{endAtMs:Date.now()+5000,valid:()=>true});
+ assert.equal(sim.output(),100);
+
+ sim.src='VNSE3-0-112233445566';sim.mac='112233445566';
+ await monitor.pollOnce();
+ const mismatch=await monitor.pollOnce();
+ assert.equal(mismatch.sample,null);
+ assert.match(mismatch.lastError,/different Venus/);
+ await assert.rejects(client.setTimedPower(0,{endAtMs:Date.now()+5000,valid:()=>true}),/revoked/);
+ sim.src='VNSE3-0-ccc837a1b440';sim.mac='ccc837a1b440';
+ assert.equal((await monitor.pollOnce()).failures,0);
+});

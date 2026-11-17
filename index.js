@@ -141,8 +141,8 @@ class GivHomeModbusPlatform {
     if(this.config.marstekSitePreviewEnabled)this.config={...this.config,enableTimedChargeTiles:false,enableTimedExportTiles:false};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.2.0-beta.7',
-      stage: 'GivHome 4.2.0-beta.7'
+      version: '4.2.0',
+      stage: 'GivHome 4.2.0'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -460,13 +460,16 @@ class GivHomeModbusPlatform {
     const ownSiteExport=exportOwner?.source==='Marstek Export To';
     const cooperativeCharge=require('./lib/marstek/site-settings').chargeCooperation(chargeOwner);
     const plannedExport=exportOwner?.phase==='active' && ['Octopus Flux Export','Evening Excess Export','Octopus Agile Export'].includes(exportOwner.source);
+    const exportPlan = exportOwner?.source === 'Octopus Agile Export' ? this.activeOctopusAgileOutgoingSlot :
+      exportOwner?.source === 'Octopus Flux Export' ? this.activeOctopusFluxExportSlot : null;
     const night = clockWindow(nowMs, this.applianceControl.cheapStart, this.applianceControl.cheapEnd, Intl.DateTimeFormat().resolvedOptions().timeZone);
     const cheap = this.currentCheapStateForStatusTiles(now);
     const iogEvidence=require('./lib/marstek/iog-evidence').evidence(this.octopusState,{nowMs,protectedEndAtMs:cheap.protectedEnd?.getTime(),active:Boolean(cheap.smartActive||cheap.graceActive),pollSeconds:this.applianceControl.octopusPollSeconds});
-    return { givBusy:this.marstekTransportBusy(nowMs),priorityControlEnabled:this.config.marstekIntegrationEnabled === true,aioEvidence:this.marstekAioEvidence?{...this.marstekAioEvidence,singleAio:this.marstek?.gatewayFeed?.knownCount===1}:null,ecoEnabled:this.config.marstekIntegrationEnabled === true,exportActive:Boolean(plannedExport),cooperativeCharge,externalOwner:Boolean((exportOwner&&!plannedExport&&!ownSiteExport)||(chargeOwner&&!cooperativeCharge&&!ownSiteCharge)),overnightEnabled: this.config.marstekOvernightEnabled !== false && this.config.enableCheapOvernightCharging !== false,
+    return { givBusy:this.marstekTransportBusy(nowMs),priorityControlEnabled:this.config.marstekIntegrationEnabled === true,aioEvidence:this.marstekAioEvidence?{...this.marstekAioEvidence,singleAio:this.marstek?.gatewayFeed?.knownCount===1}:null,ecoEnabled:this.config.marstekIntegrationEnabled === true,exportActive:Boolean(plannedExport),exportSource:exportOwner?.phase==='active'?exportOwner.source:null,exportOccurrence:exportOwner?.phase==='active'?exportOwner.id:null,exportExpectedKwh:exportPlan?.expectedKwh??exportOwner?.snapshot?.expectedGridKwh,exportExpectedBatteryKwh:exportPlan?.expectedBatteryKwh,exportPricePence:exportPlan?.pricePence,cooperativeCharge,externalOwner:Boolean((exportOwner&&!plannedExport&&!ownSiteExport)||(chargeOwner&&!cooperativeCharge&&!ownSiteCharge)),overnightEnabled: this.config.marstekOvernightEnabled !== false && this.config.enableCheapOvernightCharging !== false,
       nightActive: night.active, nightSuppressed: this.occurrenceStopped('Cheap Overnight', now, new Date(night.endAtMs || nowMs)), nightEndAtMs: night.endAtMs, occurrenceId: night.occurrenceId,
       nightTargetSoc: this.effectiveOvernightTarget(cheap, now),
       iogEnabled: this.applianceControl.features.homeBatteryProtectionDuringSmartSlots,
+      iogGraceActive: Boolean(cheap.graceActive),
       iogActive: Boolean(cheap.smartActive || cheap.graceActive), iogSuppressed: this.occurrenceStopped('Intelligent Octopus Go Home Battery Protection', now, cheap.protectedEnd), iogMode: this.applianceControl.iogHomeBatteryProtectionMode,
       iogTargetSoc: this.applianceControl.iogChargeTargetSoc, iogEndAtMs: cheap.protectedEnd?.getTime(),
       iogFresh: iogEvidence.fresh, iogFetchedAtMs: iogEvidence.fetchedAtMs,
@@ -2102,7 +2105,7 @@ class GivHomeModbusPlatform {
     const pauseModeValue = Number(tile.pauseValue || 0);
     if (![1, 2, 3].includes(pauseModeValue)) throw new Error(`pause start refused: unsupported mode for ${tile.displayName}`);
     const original = await this.readPausePrestate();
-    await this.beginControlAction('pause', original, { 318: pauseModeValue }, { source: tile.displayName || 'Pause tile', kind: tile.kind });
+    await this.beginControlAction('pause', original, { 318: pauseModeValue }, { source: tile.displayName || 'Pause tile', kind: tile.kind, verifiedPauseProfile: this.controlProfile });
     this.manualPauseIntent = pauseModeValue;
     this.iogPauseSuppressedUntilMs = 0;
     this.log.warn('GivHome pause tile start executing: label=%s HR318=%s writePlan=HR318-only willNotWrite=HR319,HR320 previousHR318=%s previousHR319=%s previousHR320=%s offAction=Eco source=homekit-explicit', tile.displayName, pauseModeValue, original.HR318, original.HR319, original.HR320);
@@ -2877,12 +2880,15 @@ class GivHomeModbusPlatform {
     const powerDecision = this.buildExportPowerDecision(tileOrPlan, decisionOptions);
     const powerPercent = validPercentOrDefault(powerDecision.powerPercent, this.applianceControl.manualExportPowerPercent || 100);
     const original = await this.readExportPrestate(profileKind);
-    await this.beginControlAction('export', { ...original, profileKind, source: label, exportSource: powerDecision.source },
+    await this.beginControlAction('export', {
+      ...original, profileKind, source: label, exportSource: powerDecision.source,
+      expectedGridKwh: Number.isFinite(powerDecision.expectedGridExportKw) ? powerDecision.expectedGridExportKw * minutes / 60 : null
+    },
       profileKind === 'ch-aio' ? { 291: startHmm, 292: endHmm, 293: exportTargetSoc, 112: powerPercent, 59: 1 } : { 56: startHmm, 57: endHmm, 112: powerPercent, 59: 1 },
       { source: label, kind: tileOrPlan.kind, end, occurrenceKey: options.occurrenceKey });
     if (original.HR59 === 1) await this.writeDirectRegister(59, 0, 'GivHome command export prepare owned namespace');
     this.logExportPowerDecision(powerDecision, powerPercent, 'pre-write');
-    this.log.warn('GivHome evidence export start executing: label=%s route=%s start=%s end=%s targetSoc=%s HR112=%s requestedKw=%s estimatedBatteryKw=%s expectedGridExportKw=%s writeOrder=slot,HR112-readback,HR59 automaticMutationPath=%s source=%s', label, profileKind === 'ch-aio' ? 'slot8' : 'core', startHmm, endHmm, exportTargetSoc, powerPercent, powerDecision.requestedKw, powerDecision.estimatedBatteryKw, powerDecision.expectedGridExportKw === null ? 'n/a' : powerDecision.expectedGridExportKw, options.automatic ? this.applianceControl.automaticMutationPath : 'homekit-explicit', powerDecision.source);
+    this.log.warn('GivHome evidence export start executing: label=%s route=%s start=%s end=%s targetSoc=%s HR112=%s requestedKw=%s estimatedBatteryKw=%s expectedGridExportKw=%s writeOrder=slot,HR112-readback,HR59 automaticMutationPath=%s source=%s actionId=%s', label, profileKind === 'ch-aio' ? 'slot8' : 'core', startHmm, endHmm, exportTargetSoc, powerPercent, powerDecision.requestedKw, powerDecision.estimatedBatteryKw, powerDecision.expectedGridExportKw === null ? 'n/a' : powerDecision.expectedGridExportKw, options.automatic ? this.applianceControl.automaticMutationPath : 'homekit-explicit', powerDecision.source, this.currentControlOwner('export')?.id);
     if (profileKind === 'ch-aio') {
       await this.writeDirectRegister(291, startHmm, 'GivHome command export HR291');
       await this.writeDirectRegister(292, endHmm, 'GivHome command export HR292');
@@ -2904,7 +2910,7 @@ class GivHomeModbusPlatform {
     const post = await this.readExportPrestate(profileKind);
     if (post.HR59 !== 1 || !require('./lib/control-state').sameValues(require('./lib/control-lifecycle').numeric(post), this.currentControlOwner('export').expected)) throw new Error('export enable readback did not confirm the complete owned settings');
     if (Number(post.HR112) !== Number(powerPercent)) throw new Error(`export post-enable HR112 mismatch: expected=${powerPercent} actual=${post.HR112}`);
-    this.log.warn('GivHome evidence export start complete: label=%s durationMinutes=%s route=%s HR59=%s HR112=%s source=%s start=%s end=%s', label, minutes, profileKind, post.HR59, post.HR112, powerDecision.source, profileKind === 'ch-aio' ? post.HR291 : post.HR56, profileKind === 'ch-aio' ? post.HR292 : post.HR57);
+    this.log.warn('GivHome evidence export start complete: label=%s durationMinutes=%s route=%s HR59=%s HR112=%s source=%s start=%s end=%s actionId=%s', label, minutes, profileKind, post.HR59, post.HR112, powerDecision.source, profileKind === 'ch-aio' ? post.HR291 : post.HR56, profileKind === 'ch-aio' ? post.HR292 : post.HR57, this.currentControlOwner('export')?.id);
     this.finishControlActionStart('export');
     if (isEvening) {
       const slot = { start: now, end, minutes, profileKind, powerPercent, powerKw: powerDecision.estimatedBatteryKw, requestedPowerKw: powerDecision.requestedKw, expectedGridExportKw: powerDecision.expectedGridExportKw, reserveSoc: exportTargetSoc, source: 'started-by-givhome-modbus', exportSource: powerDecision.source };
@@ -3053,6 +3059,28 @@ class GivHomeModbusPlatform {
     return rows.map((row) => ({ start: new Date(row.startDt), end: new Date(row.endDt) })).filter((row) => !Number.isNaN(row.start.getTime()) && !Number.isNaN(row.end.getTime()) && row.end > row.start).sort((a, b) => a.start - b.start);
   }
 
+  overnightTopUpAllowed(endAtMs, target, model, nowMs) {
+    const completion = this.controlLedger?.overnightTargetReached;
+    if (!completion || completion.endAtMs !== endAtMs || completion.target !== target) {
+      this.overnightTopUpReading = null;
+      return true;
+    }
+    const at = this.marstekAioEvidence?.observedAtMs;
+    if (!Number.isFinite(model.socPercent) || model.socPercent > target - 2 ||
+        !Number.isFinite(at) || at > nowMs || nowMs - at >= 30000) {
+      this.overnightTopUpReading = null;
+      return false;
+    }
+    const previous = this.overnightTopUpReading;
+    if (!previous || previous.endAtMs !== endAtMs || previous.target !== target || at < previous.lastAt ||
+        at - previous.lastAt >= 30000) {
+      this.overnightTopUpReading = { endAtMs, target, firstAt: at, lastAt: at };
+      return false;
+    }
+    previous.lastAt = at;
+    return at - previous.firstAt >= 60000;
+  }
+
   async applyApplianceAutomation() {
     if (this.emergencyHeld()) await this.recoverEmergencyStopIfNeeded();
     if (this.emergencyHeld()) return;
@@ -3089,6 +3117,8 @@ class GivHomeModbusPlatform {
     const smartProtectionActive = Boolean(this.applianceControl.features.homeBatteryProtectionDuringSmartSlots && cheapState.smartActive && iogProtectedEnd && !this.occurrenceStopped('Intelligent Octopus Go Home Battery Protection', now, iogProtectedEnd));
     const cheapOvernightWindowConfigured = Boolean(this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive);
     const cheapOvernightOwnsWindow = cheapOvernightWindowConfigured && !this.occurrenceStopped('Cheap Overnight', now, overnightEnd);
+    const overnightTopUpAllowed = cheapOvernightOwnsWindow && hasWindowEnd &&
+      this.overnightTopUpAllowed(overnightEnd.getTime(), overnightTarget, model, now.getTime());
     const chargeEnd = smartProtectionActive ? iogProtectedEnd : cheapState.cheapWindowEnd;
     const minutes = chargeEnd instanceof Date ? Math.max(1, Math.ceil((chargeEnd.getTime() - now.getTime()) / 60000)) : 0;
     let isIogAutoCharge = this.autoChargeActive && this.autoChargeLabel === 'Intelligent Octopus Go Home Battery Protection';
@@ -3115,12 +3145,18 @@ class GivHomeModbusPlatform {
         const reason = !cheapOvernightOwnsWindow ? 'configured overnight window ended' : 'target SOC reached';
         this.log.warn('GivHome evidence Cheap Overnight restore queued: reason=%s autoChargeLabel=%s automaticMutationPath=%s', reason, this.autoChargeLabel || 'unknown', this.applianceControl.automaticMutationPath);
         await this.cleanupApplianceCommandFamily('charge', reason);
+        if (cheapOvernightOwnsWindow && hasWindowEnd && Number.isFinite(model.socPercent) &&
+            model.socPercent >= overnightTarget && this.controlLedger) {
+          this.controlLedger.overnightTargetReached = { endAtMs: overnightEnd.getTime(), target: overnightTarget };
+          this.overnightTopUpReading = null;
+          this.saveControlLedger();
+        }
         this.log.warn('GivHome evidence Cheap Overnight restore verified: future schedules reconciled=yes reason=%s handoff=%s automaticMutationPath=%s', reason, smartProtectionActive ? 'intelligent-octopus-go' : 'eco', this.applianceControl.automaticMutationPath);
         if (!smartProtectionActive) return;
       }
     }
 
-    if (cheapOvernightOwnsWindow && socBelowTarget && hasWindowEnd && !this.autoChargeActive) {
+    if (overnightTopUpAllowed && socBelowTarget && !this.autoChargeActive) {
       const carePlan = getBatteryCarePlan({ model, cheapState, config: { ...this.applianceControl, targetSoc: overnightTarget }, now });
       const cheapMinutes = Math.max(1, Math.ceil((overnightEnd.getTime() - now.getTime()) / 60000));
       this.logCheapOvernightPlan({ active: true, reason: cheapState.smartActive || cheapState.graceActive ? 'user-configured-cheap-overnight-owns-iog-overlap' : 'main-overnight-cheap-window', cheapState, model, minutes: cheapMinutes, carePlan, trigger: 'fallback-cheap-window-supervisor' });
@@ -3191,7 +3227,7 @@ class GivHomeModbusPlatform {
     }
 
     if (cheapState.fallbackActive && !cheapState.smartActive && !cheapState.graceActive && !this.autoChargeActive) {
-      this.logCheapOvernightPlan({ active: false, reason: !this.applianceControl.features.cheapOvernightCharging ? 'cheap-overnight-disabled' : !socBelowTarget ? 'soc-at-or-above-target' : !hasWindowEnd ? 'cheap-window-end-unavailable' : 'conditions-not-met', cheapState, model, minutes, carePlan: batteryCarePlanForEvidence, trigger: 'fallback-cheap-window-supervisor' });
+      this.logCheapOvernightPlan({ active: false, reason: !this.applianceControl.features.cheapOvernightCharging ? 'cheap-overnight-disabled' : !socBelowTarget ? 'soc-at-or-above-target' : !hasWindowEnd ? 'cheap-window-end-unavailable' : cheapOvernightOwnsWindow && !overnightTopUpAllowed ? 'waiting-for-sustained-soc-drop' : 'conditions-not-met', cheapState, model, minutes, carePlan: batteryCarePlanForEvidence, trigger: 'fallback-cheap-window-supervisor' });
     }
 
     const eeeRecovered = await this.recoverEveningExcessExportFromInverter(model, cheapState, now);
@@ -3332,7 +3368,7 @@ class GivHomeModbusPlatform {
   }
 
   isOctopusAgileOutgoingLiveEnabled() {
-    if (this.applianceControl.octopusAgileOutgoingDryRun) return false;
+    if (this.config?.marstekIntegrationEnabled === true || this.applianceControl.octopusAgileOutgoingDryRun) return false;
     return String(this.applianceControl.octopusAgileOutgoingLiveAcknowledgement || '').trim() === 'ENABLE_AGILE_OUTGOING_LIVE_EXPORT';
   }
 
@@ -3403,7 +3439,7 @@ class GivHomeModbusPlatform {
     this.octopusAgileOutgoingObservedExportKwh = Number(slot.observedInverterKwh || 0);
     this.octopusAgileOutgoingLastObservedAtMs = Date.now();
     if (end > new Date() && this.applianceControl.features.octopusAgileOutgoingExport) this.octopusAgileOutgoingExportArmed = true;
-    this.log.warn('GivHome evidence Octopus Agile Export memory loaded: start=%s end=%s activeNow=%s observedInverterKwh=%s automaticMutationPath=absent', dateToDisplayHmm(start), dateToDisplayHmm(end), new Date() < end ? 'yes' : 'no', this.octopusAgileOutgoingObservedExportKwh.toFixed(3));
+    this.log.warn('GivHome evidence Octopus Agile Export memory loaded: start=%s end=%s activeNow=%s observedGridExportKwh=%s automaticMutationPath=absent', dateToDisplayHmm(start), dateToDisplayHmm(end), new Date() < end ? 'yes' : 'no', this.octopusAgileOutgoingObservedExportKwh.toFixed(3));
   }
 
   clearOctopusAgileOutgoingMemory() {
@@ -3748,10 +3784,10 @@ class GivHomeModbusPlatform {
     else if (Number.isFinite(soc) && soc <= Number(slot.reserveSoc || this.applianceControl.octopusAgileOutgoingReserveSoc)) stopReason = `reserve reached soc=${soc}`;
     else if (ageMinutes >= 3 && gridExportW < 250 && batteryDischargeW < 250) stopReason = `physical export not detected gridExportW=${Math.round(gridExportW)} batteryDischargeW=${Math.round(batteryDischargeW)}`;
 
-    this.logOctopusAgileOutgoingDecision(`active: ${dateToDisplayHmm(slot.start)}-${dateToDisplayHmm(slot.end)} price=${slot.pricePence}p observedInverterKwh=${this.octopusAgileOutgoingObservedExportKwh.toFixed(3)} gridExportW=${Math.round(gridExportW)} batteryDischargeW=${Math.round(batteryDischargeW)} soc=${Number.isFinite(soc) ? soc : 'unknown'}`, false);
+    this.logOctopusAgileOutgoingDecision(`active: ${dateToDisplayHmm(slot.start)}-${dateToDisplayHmm(slot.end)} price=${slot.pricePence}p observedGridExportKwh=${this.octopusAgileOutgoingObservedExportKwh.toFixed(3)} gridExportW=${Math.round(gridExportW)} batteryDischargeW=${Math.round(batteryDischargeW)} soc=${Number.isFinite(soc) ? soc : 'unknown'}`, false);
     if (!stopReason) return true;
 
-    this.log.warn('GivHome evidence Octopus Agile Export stop queued: reason=%s observedInverterKwh=%s expectedKwh=%s pricePence=%s automaticMutationPath=%s', stopReason, this.octopusAgileOutgoingObservedExportKwh.toFixed(3), Number(slot.expectedKwh || 0).toFixed(3), slot.pricePence, this.applianceControl.automaticMutationPath);
+    this.log.warn('GivHome evidence Octopus Agile Export stop queued: reason=%s observedGridExportKwh=%s expectedKwh=%s pricePence=%s automaticMutationPath=%s', stopReason, this.octopusAgileOutgoingObservedExportKwh.toFixed(3), Number(slot.expectedKwh || 0).toFixed(3), slot.pricePence, this.applianceControl.automaticMutationPath);
     await this.cleanupApplianceCommandFamily('export', `Octopus Agile Export ${stopReason}`);
     return true;
   }
@@ -4447,7 +4483,7 @@ class GivHomeModbusPlatform {
   refreshMarstekScheduledEvidence(nowMs = Date.now()) {
     const needsPoll = require('./lib/marstek/scheduled-evidence').needsPoll;
     if (this.pollInFlight || this.manualChargeSupervisorInFlight || this.commandIntentPending || this.commandTransportInFlight || nowMs < this.commandPollHoldUntilMs) return false;
-    if (!needsPoll({config:this.config,context:this.marstekPolicyContext(nowMs),nowMs,evidence:this.marstekAioEvidence,lastAttemptAtMs:this.marstekAioPollStartedAtMs,singleAio:this.marstek?.gatewayFeed?.knownCount===1})) return false;
+    if (!needsPoll({config:this.config,context:this.marstekPolicyContext(nowMs),nowMs,evidence:this.marstekAioEvidence,lastAttemptAtMs:this.marstekAioPollStartedAtMs,singleAio:this.marstek?.gatewayFeed?.knownCount===1,aioReserve:this.sitePreview?.planner?.aioReserve})) return false;
     void this.pollOnce();
     return true;
   }
@@ -4502,8 +4538,41 @@ class GivHomeModbusPlatform {
     }
   }
 
+  recordStandaloneExportEvidence(model, observedAtMs) {
+    const owner = this.currentControlOwner('export');
+    const active = owner?.phase === 'active';
+    if (!active && !this.standaloneExportWasActive) return;
+    if (!this.standaloneExportEvidence) {
+      const directory = path.join(this.getStoragePath(), 'givhome-export-evidence');
+      fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+      const { OperationEvidence } = require('./lib/marstek/operation-evidence');
+      this.standaloneExportEvidence = new OperationEvidence(directory, this.log);
+    }
+    const plan = owner?.source === 'Octopus Agile Export' ? this.activeOctopusAgileOutgoingSlot :
+      owner?.source === 'Octopus Flux Export' ? this.activeOctopusFluxExportSlot : null;
+    const gateway = {
+      observedAtMs,
+      siteMeterSource: 'aio',
+      aioPowerSource: 'aio',
+      units: [{ socPercent: model.socPercent }],
+      aioDischargeW: model.batterySignedPowerW,
+      gridExportW: Number.isFinite(model.gridExportPowerW) && Number.isFinite(model.gridImportPowerW) ?
+        model.gridExportPowerW - model.gridImportPowerW : null
+    };
+    this.standaloneExportEvidence.record({ gateway, nowMs: observedAtMs, context: {
+      exportActive: active, exportSource: owner?.source, exportOccurrence: owner?.id,
+      exportExpectedKwh: plan?.expectedKwh ?? owner?.snapshot?.expectedGridKwh, exportExpectedBatteryKwh: plan?.expectedBatteryKwh,
+      exportPricePence: plan?.pricePence
+    } }, { reason: active ? 'export-active' : 'export-ended' }, null, null);
+    this.standaloneExportWasActive = active;
+  }
+
   handlePollSuccess({ response, model, observedAtMs = Date.now(), durationMs }) {
     this.marstekAioEvidence={observedAtMs,identityVerified:Boolean(this.inverterSerial&&response.inverterSerial===this.inverterSerial),serial:response.inverterSerial,socPercent:model.socPercent,acDischargeW:Number.isFinite(model.batterySignedPowerW)?model.batterySignedPowerW:null,gridExportW:model.gridExportPowerW,gridImportW:model.gridImportPowerW,gridRawPowerW:model.gridRawPowerW,solarW:model.pvPowerW,householdLoadW:model.loadPowerW};
+    if (this.config?.marstekIntegrationEnabled !== true && this.marstekAioEvidence.identityVerified) {
+      try { this.recordStandaloneExportEvidence?.(model, observedAtMs); }
+      catch (error) { this.log.warn?.('GivHome export evidence unavailable: %s', error.message); }
+    }
     const previousFailures = this.health.consecutiveFailures;
 
     this.latestModel = model;

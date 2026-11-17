@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.2.0
+
+- Added optional Marstek Venus E 3.0 support for compatible GivEnergy All in One and Gateway installations.
+- Added separate AIO and Venus charge levels alongside combined Battery SOC in Apple Home.
+- Added **Charge To** and **Export To** percentage controls for homes with both batteries.
+- Extended **Cheap Overnight**, **Night Target**, and **Intelligent Octopus Go** battery protection to coordinate both batteries.
+- Added guided Venus setup and firmware rechecks in Homebridge settings.
+- Improved charging controls, Intelligent Octopus Go pause protection and settings restoration on supported GivEnergy AC-coupled inverters.
+
+## 4.2.0-beta.10
+
+- Restore read-only Venus telemetry after a firmware identity change and require a fresh battery check before control resumes.
+- Report the failed commissioning step, command acknowledgement, measured power and stop outcome.
+- Record per-battery SOC, measured AC energy and site grid energy for Eco, charging and export, with sampling coverage and control transitions.
+- Clear temporary Venus setup warnings after verified control recovery.
+- Require a sustained SOC drop before topping up again after Cheap Overnight reaches its target.
+
+## 4.2.0-beta.8
+
+- Allow bounded Venus house support with a verified Gateway reporting zero online AIOs.
+- Reuse the identity check within a queued manual pause command.
+
 ## 4.2.0-beta.7
 
 Beta Marstek Addon. Not for public use

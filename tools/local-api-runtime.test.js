@@ -70,3 +70,41 @@ test('production API observer continues collecting while a previous control deli
 
 test('Venus SOC display bridges a brief read gap with its original timestamp while live power remains unavailable',async t=>{const r=await setup(t),entry=r.manager.entries.get('v'),C=hap.Characteristic;const at=Date.now()-45000;entry.monitor.sample.model.observedAtMs=at;entry.socDisplay.clear();r.manager.publish(entry,entry.monitor.state());const bulb=entry.accessory.getServiceById(hap.Service.Lightbulb,'battery-level');assert.equal(await bulb.getCharacteristic(C.Brightness).handleGetRequest(),60);assert.equal(await bulb.getCharacteristic(C.On).handleGetRequest(),true);assert.equal(entry.monitor.sample.model.observedAtMs,at);assert.equal(entry.socDisplay.last.at,at);entry.socDisplay.clear();entry.monitor.sample.model.observedAtMs=Date.now()-95000;r.manager.publish(entry,entry.monitor.state());await assert.rejects(bulb.getCharacteristic(C.Brightness).handleGetRequest());});
 test('an identity error clears the Venus SOC display cache immediately',async t=>{const r=await setup(t),entry=r.manager.entries.get('v');entry.monitor.lastError='Venus Local API identity changed';r.manager.publish(entry,entry.monitor.state());await assert.rejects(entry.accessory.getServiceById(hap.Service.Lightbulb,'battery-level').getCharacteristic(hap.Characteristic.Brightness).handleGetRequest());assert.equal(entry.socDisplay.last,null);});
+
+test('measured runtime recovery clears the old stop warning but preserves commissioning faults',t=>{
+ const {LocalApiCommissioning,save,load}=require('../lib/marstek/local-api-commissioning');
+ const dir=fs.mkdtempSync(path.join(require('os').tmpdir(),'venus-recovery-ui-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const config={marstekShadowBatteryId:'v',marstekDevices:[{id:'v',host:'127.0.0.1'}]};
+ const c=new LocalApiCommissioning(config,dir);
+ const warn='Battery stopping could not be confirmed. Check its connection and app before continuing.';
+ for(const detail of ['Battery, firmware or settings changed. Run the connection and battery checks again.',warn]){
+  save(c.paths.status,{title:'Check needed',detail});
+  c.busy=true;c.recoverRuntimeStatus();assert.equal(load(c.paths.status).title,'Check needed');
+  c.busy=false;c.recoverRuntimeStatus();
+  assert.equal(load(c.paths.status).title,detail===warn?'Ready':'Check needed');
+ }
+ save(c.paths.status,{title:'Check needed',runtimeFault:'external-control-owner',detail:warn});
+ c.recoverRuntimeStatus();
+ assert.equal(load(c.paths.status).title,'Check needed');
+});
+
+test('firmware upgrade requalifies the same hardware and a substitute battery receives no writes',async t=>{
+ const {identity}=require('../lib/marstek/local-api-monitor');
+ const r=commissioningRig(t);
+ const binding=identity({src:'VNSE3-0-ccc837a1b440',result:{device:'VenusE 3.0',ver:151,ble_mac:'ccc837a1b440'}});
+ save(r.c.paths.certificate,{schema:1,transport:'local-api',policyRevision:'priority-20261111',
+  tests:['lease-budget-feedback'],requestQuietMs:0,signature:signature(r.config),binding:{...binding,firmware:{api:'144'},src:'VenusE-ccc837a1b440'}});
+ assert.equal(r.c.qualificationState({binding,requestQuietMs:0,identityAtMs:r.c.now()}).reason,'firmware-changed');
+ const client=r.c.clientFactory();
+ client.getDevice=async()=>({src:binding.src,result:{device:binding.model,ver:151,ble_mac:binding.mac}});
+ await r.c.run(r.req);
+ assert.equal(load(r.c.paths.certificate).binding.firmware.api,'151');
+ assert.equal(load(r.c.paths.status).ready,true);
+ const writesBefore=r.writes.length;
+ client.getDevice=async()=>({src:'VNSE3-0-112233445566',result:{device:binding.model,ver:151,ble_mac:'112233445566'}});
+ await r.c.run(r.req);
+ assert.equal(r.writes.length,writesBefore);
+ assert.match(load(r.c.paths.status).detail,/different Venus/);
+ assert.equal(r.c.referenceBinding().mac,binding.mac);
+});

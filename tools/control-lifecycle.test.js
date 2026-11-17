@@ -321,3 +321,52 @@ test('Emergency Stop accepts an omitted exposure setting but explicit false refu
   assert.throws(() => disabled.p.acceptEmergencyStopRequest(), /not enabled/);
   assert.equal(disabled.writes.length, 0);
 });
+
+test('an overnight top-up requires two percentage points down for a minute of fresh readings', () => {
+ const {GivHomeModbusPlatform}=require('../index');
+ const end=300000;
+ const p=Object.create(GivHomeModbusPlatform.prototype);
+ p.controlLedger={overnightTargetReached:{endAtMs:end,target:100}};
+ const sample=(soc,at,now=at)=>{
+  p.marstekAioEvidence={observedAtMs:at};
+  return p.overnightTopUpAllowed(end,100,{socPercent:soc},now);
+ };
+ assert.equal(sample(99,10000),false);
+ assert.equal(sample(98,20000),false);
+ assert.equal(sample(98,20000,40000),false);
+ assert.equal(sample(98,40000),false);
+ assert.equal(sample(98,60000),false);
+ assert.equal(sample(98,80000),true);
+ assert.equal(sample(99,85000),false);
+ assert.equal(sample(97,90000,125000),false);
+ assert.equal(p.overnightTopUpAllowed(end+86400000,100,{socPercent:98},93000),true);
+ assert.equal(p.overnightTopUpAllowed(end,99,{socPercent:98},93000),true);
+});
+
+test('standalone export records signed grid energy and associates cleanup with the same action', t => {
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+ const {GivHomeModbusPlatform}=require('../index');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'standalone-export-evidence-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const p=Object.create(GivHomeModbusPlatform.prototype);
+ p.getStoragePath=()=>dir;
+ p.log={};
+ let owner={id:'export-1',phase:'active',source:'Octopus Agile Export'};
+ p.currentControlOwner=()=>owner;
+ p.activeOctopusAgileOutgoingSlot={expectedKwh:1.5,pricePence:20};
+ const model={socPercent:80,batterySignedPowerW:3000,gridExportPowerW:2000,gridImportPowerW:0};
+ const start=Date.parse('2026-11-17T16:00:00Z');
+ p.recordStandaloneExportEvidence(model,start);
+ p.recordStandaloneExportEvidence(model,start+10000);
+ owner=null;
+ p.recordStandaloneExportEvidence(model,start+20000);
+ const file=path.join(dir,'givhome-export-evidence','battery-operations-2026-11-17.json');
+ const [sale]=Object.values(JSON.parse(fs.readFileSync(file)).windows);
+ assert.equal(sale.operation,'export-1');
+ assert.equal(sale.plannedExportKwh,1.5);
+ assert.equal(sale.grid.coveredMs,10000);
+ assert(Math.abs(sale.grid.outWh-2000*10/3600)<1e-9);
+ assert(Math.abs(sale.aio.outWh-3000*10/3600)<1e-9);
+ assert.equal(sale.venus.coveredMs,0);
+ assert.equal(sale.nextObservedOperation.atMs,start+20000);
+});

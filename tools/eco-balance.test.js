@@ -82,3 +82,76 @@ test('collection continuity allows a full bounded grace after a valid paced AIO 
  const {ShadowService}=require('../lib/marstek/shadow-service');let now=100000,unavailable=false,stops=0;const gateway={observedAtMs:75000,meterObservedAtMs:75000,siteMeterSource:'aio',onlineCount:1},s=new ShadowService({now:()=>now,monotonic:()=>now,periodMs:8000,continuityMs:30000,deadlineMs:45000,readGateway:async()=>unavailable?{unavailable:true}:gateway,readVenus:async()=>({observedAtMs:now,acDischargeW:300}),planProvider:async sample=>{assert.equal(sample.gateway.observedAtMs,75000);return {venusW:300,leaseUntilMs:now+30000,reason:'eco-house-support'};},onUnavailable:async()=>{stops++;}});t.after(()=>s.stop());
  await s.tick();assert.equal(s.lastObservationAt,100000);unavailable=true;now+=8000;await s.tick();assert.equal(stops,0);assert.equal(s.lastResult.request.reason,'observation-delayed');assert.equal(gateway.observedAtMs,75000);now+=23000;await s.tick();await s.stopAction;assert(stops>0);assert.equal(s.lastObservationAt,100000);
 });
+test('confirmed offline AIO hands house demand to Venus without inventing total SOC or exporting',()=>{
+ const s=sample(80,70),p=new SiteCoordinator({venusOutputW:2500,higherDischargeLimitConfirmed:true});
+ Object.assign(s.gateway,{onlineCount:0,units:[],aioOfflineConfirmed:true,siteMeterSource:'gateway',gridExportW:-1200,aioDischargeW:0});
+ s.venus.deviceMode='Passive';
+ const plan=()=>p.step(s);
+ assert.equal(plan().venusW,1150);assert.equal(plan().aioW,0);assert.equal(plan().combinedSoc,null);
+ s.gateway.gridExportW=-3200;assert.equal(plan().venusW,2500);
+ s.venus.acDischargeW=1100;s.gateway.gridExportW=1100;assert.equal(plan().venusW,0);
+ s.gateway.gridExportW=-1200;
+ for(const [source,key,value] of [[s.venus,'socPercent',20],[s.venus,'identityQualified',false],[s.venus,'observedAtMs',0],[s.gateway,'observedAtMs',3999],[s.gateway,'aioOfflineConfirmed',false],[s.context,'automationHold',true],[s.context,'exportActive',true],[s.context,'iogEnabled',true]]){
+  const previous=source[key];source[key]=value;assert.equal(plan().venusW,0,key);source[key]=previous;
+ }
+ Object.assign(s.context,{priorityControlEnabled:true,iogEnabled:true,iogFresh:true,iogFetchedAtMs:s.nowMs,iogActive:true,iogMode:'charge',iogEndAtMs:90000,iogTargetSoc:100,
+  aioEvidence:{observedAtMs:s.nowMs,identityVerified:true,singleAio:true,socPercent:75,acDischargeW:0}});
+ assert.equal(plan().venusW,0);assert.equal(plan().reason,'await-aio-evidence');
+ s.context.iogActive=false;
+ Object.assign(s.gateway,{aioOfflineConfirmed:false,onlineCount:1,units:[{socPercent:75}],aioDischargeW:1200});
+ assert.equal(plan().reason,'eco-house-support');assert(plan().combinedSoc>70);
+});
+test('Gateway confirms offline only with fresh zero membership and no conflicting measured AIO watts',async()=>{
+ const {GatewayFeed}=require('../lib/marstek/gateway-feed');let now=10000,online=0,ac=0,serial='GW2412G068';
+ const client={async readInputRegisters(base){assert.notEqual(base,1800);return {inverterSerial:serial,deviceAddress:17,transparentFunction:4,baseRegister:base,requestSentAtMs:now,values:base===1700?[0,online,ac]:[64336,0,1200]};}};
+ const f=new GatewayFeed({serial},{now:()=>now,client});await f.tick();
+ const get=aioEvidence=>f.snapshot({allowAioSiteFallback:true,aioEvidence});
+ assert.equal(get().aioOfflineConfirmed,true);assert.equal(get().gridExportW,-1200);assert.throws(()=>f.snapshot());
+ assert.throws(()=>get({identityVerified:true,observedAtMs:now,acDischargeW:1000}));now+=6001;assert.throws(()=>get());
+ ac=64536;await f.tick();assert.throws(()=>get());
+ serial='wrong';await assert.rejects(f.tick());assert.throws(()=>get(),/identity/);
+});
+test('offline Venus commands expire within 30 seconds and stale queued plans write no power',async()=>{
+ const {LocalApiControlSession}=require('../lib/marstek/local-api-control-session');let now=100000,power=0;const writes=[];
+ const client={async setTimedPower(p,o){assert(o.valid());power=p;writes.push(p);return {result:{set_result:true}};},async getMode(){return {result:{mode:'Passive',ongrid_power:power}};},close(){}};
+ const c=new LocalApiControlSession({maxChargeW:2500,maxDischargeW:2500},{client,qualified:true,now:()=>now});
+ const s=()=>({gateway:{observedAtMs:now,aioOfflineConfirmed:true},venus:{observedAtMs:now,deviceMode:'Passive',acDischargeW:power},context:{localApiTimed:true}});
+ const p={evidenceKind:'aio-offline-eco',controlKind:'eco',venusW:1150,aioW:0,availableKwh:3,leaseUntilMs:now+5000};
+ try{await c.apply(p,s());assert.equal(power,1150);assert.equal(c.timed.active.endAtMs,now+30000);
+  now+=6000;await c.apply(p,s());assert.equal(power,0);assert.deepEqual(writes,[1150,0]);
+ }finally{await c.close();}
+});
+
+test('operation evidence measures battery and grid energy separately and breaks at observation gaps', t => {
+ const {OperationEvidence}=require('../lib/marstek/operation-evidence');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'operation-evidence-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ let journal=new OperationEvidence(dir,{});
+ const start=Date.parse('2026-11-17T06:00:00Z');
+ const context={iogActive:true,iogEnabled:true,iogGraceActive:true,iogEndAtMs:start+600000};
+ const plan={reason:'scheduled-charge',venusW:-500,chargeTargetSoc:100};
+ const push=(offset, {gap=false, held=null, policy=context, result=plan}={})=>{
+  const at=start+offset;
+  journal.record({nowMs:at,context:policy,gateway:gap?{unavailable:true}:{observedAtMs:at,gridExportW:-1400,aioDischargeW:-900,units:[{socPercent:80}]},
+   venus:{observedAtMs:at,socPercent:75,acDischargeW:-500,identityQualified:!gap,acDirectionQualified:true}},result,null,held);
+ };
+ push(0);push(10000);push(10000);push(20000,{gap:true,held:'stop-unconfirmed'});push(25000);push(35000);
+ const file=path.join(dir,'battery-operations-2026-11-17.json');
+ journal=new OperationEvidence(dir,{});
+ push(45000);
+ const exportContext={exportActive:true,exportSource:'Octopus Agile Export',exportOccurrence:'sale-1',exportExpectedKwh:2.1,exportPricePence:22};
+ push(55000,{policy:exportContext,result:{reason:'peak-export-assistance',venusW:300}});
+ const [grace,exportWindow]=Object.values(JSON.parse(fs.readFileSync(file)).windows);
+ assert.deepEqual([grace.kind,exportWindow.kind],['iog-grace','Octopus Agile Export']);
+ assert.deepEqual([grace.venus.startSoc,grace.venus.endSoc],[75,75]);
+ assert.equal(grace.venus.coveredMs,20000);
+ assert.equal(grace.aio.inWh,5);
+ assert(Math.abs(grace.venus.inWh-500*20/3600)<1e-9);
+ assert(Math.abs(grace.grid.inWh-1400*20/3600)<1e-9);
+ assert(grace.transitions.some(e=>e.hold==='stop-unconfirmed'));
+ assert.equal(grace.nextObservedOperation.operation,'sale-1');
+ assert.equal(exportWindow.plannedExportKwh,2.1);
+ assert.equal(exportWindow.exportPricePence,22);
+ assert.equal(exportWindow.maxRequestedDischargeW,300);
+ assert.equal(exportWindow.grid.outWh,0);
+});

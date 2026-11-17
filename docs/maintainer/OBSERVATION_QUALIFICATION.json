@@ -1,29 +1,18 @@
 {
-  "version": "4.2.0-beta.7",
-  "status": "simulation-validated",
-  "runtimeSha256": "4d4333437c98abe6be6a4621cf24f075f756140079bcd716dbfc49fd64fe4ccc",
+  "version": "4.2.0",
+  "status": "release-validated",
+  "runtimeSha256": "5bedac7cc8fbea9f426648c0620b1f03d150c4fe33a3a1c630daf6ee885cbd16",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_4.2.0_BETA7.md",
-  "reason": "Project owner authorised Git push and beta-channel npm publication on 15 November 2026. Simulation evidence only for the CE correction.",
-  "betaPublication": {
-    "version": "4.2.0-beta.7",
-    "authorizedBy": "project owner",
-    "authorizedOn": "2026-11-15",
-    "channel": "beta",
-    "scope": "ce-control-compatibility",
-    "condition": "all-checks-pass",
-    "physicalValidationClaimed": false,
+  "evidence": "docs/maintainer/VALIDATION_4.2.0.md",
+  "stableReadiness": {
+    "version": "4.2.0",
+    "authorisedBy": "project owner",
+    "authorisedOn": "2026-11-17",
+    "channel": "stable",
     "resourceBudgetsClaimed": false,
     "commissioningRequired": true
-  },
-  "simulationValidation": {
-    "sourcePassed": true,
-    "packedPassed": true,
-    "nativeHapPassed": true,
-    "networkIsolationPassed": true,
-    "bothAcModelsPassed": true
   }
 }
