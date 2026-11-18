@@ -311,14 +311,14 @@ test('expired timed charge refuses a late target update', async (t) => {
   assert.equal(writes.length, count);
 });
 
-test('lowering overnight target below SOC cleans up; raising it starts with the saved preference', async (t) => {
+test('AIO retains overnight protection while its charge target changes above and below SOC', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-10T01:00:00+01:00').getTime() });
   const { platform: p, registers } = fixture(t);
   await p.applyApplianceAutomation();
   p.setChargeTargetFromHome(30);
   await p.applyApplianceAutomation();
-  assert.equal(registers.HR96, 0);
-  assert.equal(registers.HR116, 40);
+  assert.equal(registers.HR96, 1);
+  assert.equal(registers.HR116, 30);
   assert.equal(p.applianceControl.targetSoc, 30);
   p.setChargeTargetFromHome(70);
   await p.applyApplianceAutomation();

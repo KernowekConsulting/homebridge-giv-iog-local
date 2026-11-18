@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.2.1
+
+- Keep the AIO charge slot armed at the Cheap Overnight target, including across a Homebridge child bridge restart.
+- Hand over to IOG protection when Cheap Overnight ends during a smart slot or Grace Period.
+- On the AIO, IOG’s **Pause Charge** mode now pauses discharge as well.
+
 ## 4.2.0
 
 - Added optional Marstek Venus E 3.0 support for compatible GivEnergy All in One and Gateway installations.

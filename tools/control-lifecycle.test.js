@@ -322,6 +322,60 @@ test('Emergency Stop accepts an omitted exposure setting but explicit false refu
   assert.equal(disabled.writes.length, 0);
 });
 
+test('AIO at target retains its overnight slot through a restart and then protects IOG and grace', async t => {
+  const f = fixture(t, { now: '2026-11-17T23:30:30Z' });
+  f.p.latestModel.socPercent = 100;
+  await f.p.applyApplianceAutomation();
+  assert.equal(f.registers[96], 1);
+  assert.equal(f.registers[95], 530);
+  const writes = f.writes.length;
+
+  t.mock.timers.setTime(Date.parse('2026-11-18T02:00:30Z'));
+  const p = f.restart();
+  p.latestModel.socPercent = 100;
+  p.applianceControl.features.homeBatteryProtectionDuringSmartSlots = true;
+  p.octopusState.dispatches = [{ start: new Date('2026-11-18T02:00:00Z'), end: new Date('2026-11-18T06:00:00Z') }];
+  await p.applyApplianceAutomation();
+  assert.equal(f.writes.length, writes);
+  assert.equal(p.autoChargeLabel, 'Cheap Overnight');
+
+  t.mock.timers.setTime(Date.parse('2026-11-18T05:30:00Z'));
+  await p.applyApplianceAutomation();
+  assert.equal(p.autoChargeLabel, 'Intelligent Octopus Go Home Battery Protection');
+  assert.equal(f.registers[96], 1);
+  assert.equal(f.registers[95], 600);
+
+  t.mock.timers.setTime(Date.parse('2026-11-18T05:50:00Z'));
+  p.octopusState.dispatches = [];
+  p.octopusState.earlyTerminationGraceUntil = new Date('2026-11-18T06:20:00Z');
+  await p.applyApplianceAutomation();
+  assert.equal(f.registers[96], 1);
+  assert.equal(f.registers[95], 620);
+
+  t.mock.timers.setTime(Date.parse('2026-11-18T06:20:00Z'));
+  await p.applyApplianceAutomation();
+  assert.equal(f.registers[96], 0);
+  assert.equal(p.currentControlOwner('charge'), null);
+});
+
+test('AIO IOG Pause Charge also protects against discharge through grace', async t => {
+  const f = fixture(t, { now: '2026-11-18T13:00:00Z', config: { iogHomeBatteryProtectionMode: 'pauseCharge' } });
+  f.p.applianceControl.features.homeBatteryProtectionDuringSmartSlots = true;
+  f.p.octopusState.dispatches = [{ start: new Date('2026-11-18T13:00:00Z'), end: new Date('2026-11-18T13:30:00Z') }];
+  await f.p.applyApplianceAutomation();
+  assert.equal(f.registers[318], 3);
+
+  t.mock.timers.setTime(Date.parse('2026-11-18T13:15:00Z'));
+  f.p.octopusState.dispatches = [];
+  f.p.octopusState.earlyTerminationGraceUntil = new Date('2026-11-18T13:40:00Z');
+  await f.p.applyApplianceAutomation();
+  assert.equal(f.registers[318], 3);
+
+  t.mock.timers.setTime(Date.parse('2026-11-18T13:40:00Z'));
+  await f.p.applyApplianceAutomation();
+  assert.equal(f.registers[318], 0);
+});
+
 test('an overnight top-up requires two percentage points down for a minute of fresh readings', () => {
  const {GivHomeModbusPlatform}=require('../index');
  const end=300000;

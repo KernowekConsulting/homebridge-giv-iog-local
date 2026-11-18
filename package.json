@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
@@ -157,7 +157,8 @@
     "tools/venus-rate.test.js",
     "tools/eco-balance.test.js",
     "docs/MARSTEK_SETUP.md",
-    "docs/maintainer/VALIDATION_4.2.0.md"
+    "docs/maintainer/VALIDATION_4.2.0.md",
+    "docs/maintainer/VALIDATION_4.2.1.md"
   ],
   "displayName": "GivHome",
   "homepage": "https://homebridge.givhome.kernowekconsulting.co.uk",

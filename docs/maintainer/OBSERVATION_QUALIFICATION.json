@@ -1,16 +1,16 @@
 {
-  "version": "4.2.0",
+  "version": "4.2.1",
   "status": "release-validated",
-  "runtimeSha256": "5bedac7cc8fbea9f426648c0620b1f03d150c4fe33a3a1c630daf6ee885cbd16",
+  "runtimeSha256": "2b02876e39f5605b35b1eba27ca298ae3d74f38d60f8f6cc89ce6b86221679cc",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_4.2.0.md",
+  "evidence": "docs/maintainer/VALIDATION_4.2.1.md",
   "stableReadiness": {
-    "version": "4.2.0",
+    "version": "4.2.1",
     "authorisedBy": "project owner",
-    "authorisedOn": "2026-11-17",
+    "authorisedOn": "2026-11-18",
     "channel": "stable",
     "resourceBudgetsClaimed": false,
     "commissioningRequired": true

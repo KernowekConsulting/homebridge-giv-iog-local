@@ -141,8 +141,8 @@ class GivHomeModbusPlatform {
     if(this.config.marstekSitePreviewEnabled)this.config={...this.config,enableTimedChargeTiles:false,enableTimedExportTiles:false};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.2.0',
-      stage: 'GivHome 4.2.0'
+      version: '4.2.1',
+      stage: 'GivHome 4.2.1'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -2672,8 +2672,10 @@ class GivHomeModbusPlatform {
       return false;
     }
     const mode = String(options.mode || this.applianceControl.iogHomeBatteryProtectionMode || 'pauseDischarge');
-    const modeText = this.applianceControl.iogHomeBatteryProtectionModeText || mode;
-    const pauseModeValue = Number(this.applianceControl.iogHomeBatteryProtectionPauseValue || 0);
+    // Preserve the requested charge pause while also protecting the AIO from discharge.
+    const aioPauseBoth = this.controlProfile.kind === 'ch-aio' && mode === 'pauseCharge';
+    const modeText = aioPauseBoth ? 'Pause Both' : this.applianceControl.iogHomeBatteryProtectionModeText || mode;
+    const pauseModeValue = aioPauseBoth ? 3 : Number(this.applianceControl.iogHomeBatteryProtectionPauseValue || 0);
     if (![1, 2, 3].includes(pauseModeValue)) throw new Error(`pause protection refused: unsupported pause mode ${mode}`);
     const end = options.endDate instanceof Date ? options.endDate : null;
     const original = await this.readPausePrestate();
@@ -3111,6 +3113,7 @@ class GivHomeModbusPlatform {
     this.logBatteryCarePlan(batteryCarePlanForEvidence, cheapState, model, now, signatureChanged ? 'automation-evaluation' : 'automation-supervisor-repeat');
 
     const socBelowTarget = Number.isFinite(model.socPercent) && model.socPercent < overnightTarget;
+    const aio = this.controlProfile?.kind === 'ch-aio';
     const overnightEnd = cheapState.fallbackWindowEnd;
     const hasWindowEnd = overnightEnd instanceof Date && !Number.isNaN(overnightEnd.getTime());
     const iogProtectedEnd = cheapState.protectedEnd instanceof Date && !Number.isNaN(cheapState.protectedEnd.getTime()) ? cheapState.protectedEnd : null;
@@ -3118,9 +3121,26 @@ class GivHomeModbusPlatform {
     const cheapOvernightWindowConfigured = Boolean(this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive);
     const cheapOvernightOwnsWindow = cheapOvernightWindowConfigured && !this.occurrenceStopped('Cheap Overnight', now, overnightEnd);
     const overnightTopUpAllowed = cheapOvernightOwnsWindow && hasWindowEnd &&
-      this.overnightTopUpAllowed(overnightEnd.getTime(), overnightTarget, model, now.getTime());
+      (aio || this.overnightTopUpAllowed(overnightEnd.getTime(), overnightTarget, model, now.getTime()));
     const chargeEnd = smartProtectionActive ? iogProtectedEnd : cheapState.cheapWindowEnd;
     const minutes = chargeEnd instanceof Date ? Math.max(1, Math.ceil((chargeEnd.getTime() - now.getTime()) / 60000)) : 0;
+    // Restore the automatic owner from the journal after a child bridge restart.
+    // Do not cycle an already enabled slot just to reconstruct in-memory state.
+    if (aio && !this.autoChargeActive) {
+      const owner = this.currentControlOwner('charge');
+      if (owner?.phase === 'active' && ['Cheap Overnight', 'Intelligent Octopus Go Home Battery Protection'].includes(owner.source)) {
+        const observed = await this.readChargePrestate();
+        if (!this.ownedChargeTargetState(observed)) {
+          this.log.warn('GivHome AIO automatic charge settings differ from the saved owner; discharge protection is unconfirmed');
+          return;
+        }
+        this.autoChargeActive = true;
+        this.autoChargeLabel = owner.source;
+        this.autoChargeProtectedUntilMs = owner.endAtMs;
+        this.activeChargeTarget = { source: owner.source, targetSoc: observed.HR116, startHmm: observed.HR94,
+          endHmm: observed.HR95, powerPercent: observed.HR111, endAtMs: owner.endAtMs };
+      }
+    }
     let isIogAutoCharge = this.autoChargeActive && this.autoChargeLabel === 'Intelligent Octopus Go Home Battery Protection';
     let isIogAutoPause = this.autoChargeActive && this.autoChargeLabel === 'Intelligent Octopus Go Home Battery Protection Pause';
     const isIogAutoProtection = isIogAutoCharge || isIogAutoPause;
@@ -3141,7 +3161,7 @@ class GivHomeModbusPlatform {
           this.log.warn('GivHome evidence Intelligent Octopus Go restore verified: family=%s reason=%s handoff=%s automaticMutationPath=%s', protectionFamily, reason, cheapOvernightOwnsWindow ? 'cheap-overnight' : 'eco-or-next-control', this.applianceControl.automaticMutationPath);
           if (!cheapOvernightOwnsWindow && !smartProtectionActive) return;
         }
-      } else if (!cheapOvernightOwnsWindow || !socBelowTarget) {
+      } else if (!cheapOvernightOwnsWindow || (!aio && !socBelowTarget)) {
         const reason = !cheapOvernightOwnsWindow ? 'configured overnight window ended' : 'target SOC reached';
         this.log.warn('GivHome evidence Cheap Overnight restore queued: reason=%s autoChargeLabel=%s automaticMutationPath=%s', reason, this.autoChargeLabel || 'unknown', this.applianceControl.automaticMutationPath);
         await this.cleanupApplianceCommandFamily('charge', reason);
@@ -3156,7 +3176,9 @@ class GivHomeModbusPlatform {
       }
     }
 
-    if (overnightTopUpAllowed && socBelowTarget && !this.autoChargeActive) {
+    // The AIO's native charge slot uses its SOC target to stop charging.
+    // Keep the slot armed even when already at target so Eco cannot take over.
+    if (overnightTopUpAllowed && (aio || socBelowTarget) && !this.autoChargeActive) {
       const carePlan = getBatteryCarePlan({ model, cheapState, config: { ...this.applianceControl, targetSoc: overnightTarget }, now });
       const cheapMinutes = Math.max(1, Math.ceil((overnightEnd.getTime() - now.getTime()) / 60000));
       this.logCheapOvernightPlan({ active: true, reason: cheapState.smartActive || cheapState.graceActive ? 'user-configured-cheap-overnight-owns-iog-overlap' : 'main-overnight-cheap-window', cheapState, model, minutes: cheapMinutes, carePlan, trigger: 'fallback-cheap-window-supervisor' });
@@ -3217,7 +3239,7 @@ class GivHomeModbusPlatform {
         const verified = await this.withManualChargeTransportGate('GivHome evidence smart-slot home-battery protection pause-mode enforce', async () => {
           return this.startIogPauseProtectionCommand({ mode: protectionMode, automatic: true, label: 'Intelligent Octopus Go Home Battery Protection', startDate: now, endDate: iogProtectedEnd, minutes });
         });
-        if (verified === false && this.isCeAcCoupledProfile()) return;
+        if (verified === false && (aio || this.isCeAcCoupledProfile())) return;
         this.autoChargeLabel = 'Intelligent Octopus Go Home Battery Protection Pause';
       }
       this.autoChargeActive = true;

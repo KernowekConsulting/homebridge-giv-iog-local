@@ -57,9 +57,9 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
     && simulation?.sourcePassed === true && simulation?.packedPassed === true
     && simulation?.nativeHapPassed === true && simulation?.networkIsolationPassed === true
     && simulation?.bothAcModelsPassed === true && optionalFoundation;
-  const marstekStable = !allowBeta && record.status === 'release-validated' && pkg.version === '4.2.0'
+  const marstekStable = !allowBeta && record.status === 'release-validated' && ['4.2.0', '4.2.1'].includes(pkg.version)
     && pkg.publishConfig?.tag === 'latest' && readiness?.version === pkg.version
-    && readiness?.authorisedBy === 'project owner' && readiness?.authorisedOn === '2026-11-17'
+    && readiness?.authorisedBy === 'project owner' && readiness?.authorisedOn === (pkg.version === '4.2.1' ? '2026-11-18' : '2026-11-17')
     && readiness?.channel === 'stable' && readiness?.resourceBudgetsClaimed === false
     && readiness?.commissioningRequired === true
     && schema?.schema?.properties?.marstekIntegrationEnabled?.default === false && optionalFoundation;
@@ -71,7 +71,7 @@ function main() {
   const files = ['index.js', 'config.schema.json', 'package.json',
     ...fs.readdirSync(path.join(root, 'lib')).filter(n => n.endsWith('.js')).map(n => `lib/${n}`),
     ...fs.readdirSync(path.join(root, 'homebridge-ui/public')).filter(n => /\.(?:html|js)$/.test(n)).map(n => `homebridge-ui/public/${n}`)].sort();
-  if(['4.2.0','4.2.0-beta.1','4.2.0-beta.2','4.2.0-beta.7'].includes(JSON.parse(fs.readFileSync(path.join(root,'package.json'))).version)){const walk=dir=>fs.readdirSync(path.join(root,dir),{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):/\.(js|html)$/.test(e.name)?[dir+'/'+e.name]:[]);files.splice(0,files.length,...new Set(['index.js','config.schema.json','package.json','tools/verify-observation-qualification.js',...walk('lib'),...walk('homebridge-ui')]));files.sort();}
+  if(['4.2.1','4.2.0','4.2.0-beta.1','4.2.0-beta.2','4.2.0-beta.7'].includes(JSON.parse(fs.readFileSync(path.join(root,'package.json'))).version)){const walk=dir=>fs.readdirSync(path.join(root,dir),{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):/\.(js|html)$/.test(e.name)?[dir+'/'+e.name]:[]);files.splice(0,files.length,...new Set(['index.js','config.schema.json','package.json','tools/verify-observation-qualification.js',...walk('lib'),...walk('homebridge-ui')]));files.sort();}
   const digest = crypto.createHash('sha256');
   for (const file of files) { digest.update(file + '\0'); digest.update(fs.readFileSync(path.join(root, file))); }
   const runtimeSha256 = digest.digest('hex');
@@ -88,7 +88,7 @@ function main() {
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
     : ['4.1.2', '4.1.3'].includes(pkg.version)
       ? `PASS simulation-validated ${pkg.version} control patch; physical validation and formal resource budgets are not claimed.`
-      : pkg.version === '4.2.0' ? 'PASS owner-authorised 4.2.0 stable release record; formal paired resource budgets are not claimed.'
+      : ['4.2.0', '4.2.1'].includes(pkg.version) ? `PASS owner-authorised ${pkg.version} stable release record; formal paired resource budgets are not claimed.`
       : pkg.version === '4.1.1'
       ? 'PASS field-observed 4.1.1 stable readiness; formal paired resource budgets are not claimed.'
       : ['4.2.0-beta.1','4.2.0-beta.2','4.2.0-beta.7'].includes(pkg.version) ? 'PASS owner-authorised Marstek beta; unattended field qualification and resource budgets are not claimed.' : 'PASS owner-authorised beta.10 publication; formal resource budgets remain unmeasured.');
