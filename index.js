@@ -141,8 +141,8 @@ class GivHomeModbusPlatform {
     if(this.config.marstekSitePreviewEnabled)this.config={...this.config,enableTimedChargeTiles:false,enableTimedExportTiles:false};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.2.1',
-      stage: 'GivHome 4.2.1'
+      version: '4.2.2',
+      stage: 'GivHome 4.2.2'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.2.2
+
+- Fix delayed Venus household-support recovery after Local API timeouts.
+- Reconcile confirmed stops without repeatedly restarting cleanup.
+- Show observation age, recovery decisions and requested versus measured power in logs.
+
 ## 4.2.1
 
 - Keep the AIO charge slot armed at the Cheap Overnight target, including across a Homebridge child bridge restart.

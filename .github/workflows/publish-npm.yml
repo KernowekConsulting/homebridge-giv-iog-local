@@ -2,7 +2,7 @@ name: Publish npm
 
 on:
   push:
-    tags: ['v4.2.1']
+    tags: ['v4.2.2']
 
 permissions:
   id-token: write
@@ -23,7 +23,7 @@ jobs:
       - name: Verify stable release
         run: |
           npm install --global npm@11.21.1
-          test "$(node -p 'require("./package.json").version')" = "4.2.1"
+          test "$(node -p 'require("./package.json").version')" = "4.2.2"
           node tools/verify-observation-qualification.js
           npm ci --ignore-scripts
           npm test
@@ -32,9 +32,9 @@ jobs:
       - name: Validate the packed release
         run: |
           npm pack --ignore-scripts
-          sha256sum -c <<< "cee9c6271023834ab360f99e8ae015eeab4ee0fd15777ff8ca783c437c00e41c  homebridge-giv-iog-local-4.2.1.tgz"
+          sha256sum -c <<< "ccb3bf76a8a484c8c0a1997022845536e041af409a8c2919d7475b9a2f8ffae0  homebridge-giv-iog-local-4.2.2.tgz"
           mkdir verified-package
-          tar -xzf homebridge-giv-iog-local-4.2.1.tgz -C verified-package
+          tar -xzf homebridge-giv-iog-local-4.2.2.tgz -C verified-package
           ln -s "$PWD/node_modules" verified-package/package/node_modules
           cd verified-package/package
           node tools/verify-observation-qualification.js
@@ -42,4 +42,4 @@ jobs:
           node tools/verify-release-notes.js
           npm run test:hap
       - name: Publish stable package with provenance
-        run: npm publish homebridge-giv-iog-local-4.2.1.tgz --access public --tag latest --provenance
+        run: npm publish homebridge-giv-iog-local-4.2.2.tgz --access public --tag latest --provenance
