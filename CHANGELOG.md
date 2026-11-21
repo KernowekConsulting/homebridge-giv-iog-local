@@ -1,3 +1,9 @@
+# 4.2.3-beta.1
+
+- Steadier Gateway readings through connection reuse and heartbeat replies.
+- Keeps existing AIO communication, battery controls and continuity fallbacks.
+- Local testing only.
+
 # Changelog
 
 ## 4.2.2

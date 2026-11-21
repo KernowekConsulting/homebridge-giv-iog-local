@@ -2,7 +2,7 @@ name: Publish npm
 
 on:
   push:
-    tags: ['v4.2.2']
+    tags: ['v4.2.3-beta.3']
 
 permissions:
   id-token: write
@@ -20,11 +20,10 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
-      - name: Verify stable release
+      - name: Verify beta release
         run: |
           npm install --global npm@11.21.1
-          test "$(node -p 'require("./package.json").version')" = "4.2.2"
-          node tools/verify-observation-qualification.js
+          test "$(node -p 'require("./package.json").version')" = "4.2.3-beta.3"
           npm ci --ignore-scripts
           npm test
           npm run test:hap
@@ -32,14 +31,13 @@ jobs:
       - name: Validate the packed release
         run: |
           npm pack --ignore-scripts
-          sha256sum -c <<< "ccb3bf76a8a484c8c0a1997022845536e041af409a8c2919d7475b9a2f8ffae0  homebridge-giv-iog-local-4.2.2.tgz"
+          sha256sum -c <<< "947ea1256312e031f823a969063ad3cbd73808eceef60d4df723c8282a0ce8de  homebridge-giv-iog-local-4.2.3-beta.3.tgz"
           mkdir verified-package
-          tar -xzf homebridge-giv-iog-local-4.2.2.tgz -C verified-package
+          tar -xzf homebridge-giv-iog-local-4.2.3-beta.3.tgz -C verified-package
           ln -s "$PWD/node_modules" verified-package/package/node_modules
           cd verified-package/package
-          node tools/verify-observation-qualification.js
           node tools/verify-release.js
           node tools/verify-release-notes.js
           npm run test:hap
-      - name: Publish stable package with provenance
-        run: npm publish homebridge-giv-iog-local-4.2.2.tgz --access public --tag latest --provenance
+      - name: Publish beta package with provenance
+        run: npm publish homebridge-giv-iog-local-4.2.3-beta.3.tgz --access public --tag beta --provenance

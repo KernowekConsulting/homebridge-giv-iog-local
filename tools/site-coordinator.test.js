@@ -26,3 +26,19 @@ test('native HAP dimmers retain targets, arm only with fresh membership, cancel 
  s.gateway.onlineCount=0;ui.sample(s);await assert.rejects(ui.tiles.export.on.handleSetRequest(true));
 });
 test('near-reserve power tapers to preserve energy for delayed response',()=>{const s=sample();s.intent.mode='export';s.intent.target=0;s.gateway.units[0].socPercent=20.01;s.venus.socPercent=20.01;const r=new SiteCoordinator().step(s);assert.ok(r.aioW>0&&r.aioW<400);assert.ok(r.venusW>0&&r.venusW<120);});
+
+test('AIO retains export priority while Venus covers a 2 kW household deficit',()=>{
+ const coordinator=new SiteCoordinator({exportLimitW:6000,venusOutputW:2500,higherDischargeLimitConfirmed:true});
+ const state=sample();
+ state.intent=null;
+ state.context={exportActive:true};
+ state.gateway.aioDischargeW=6000;
+ state.gateway.gridExportW=4000;
+ state.venus.acDischargeW=0;
+ state.venus.socPercent=80;
+ const plan=coordinator.step(state);
+ assert.equal(plan.aioW,0);
+ assert.equal(plan.venusW,2000-coordinator.marginW);
+ state.gateway.gridExportW=6000;
+ assert.equal(coordinator.step(state).venusW,0);
+});
