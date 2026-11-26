@@ -1,7 +1,5 @@
-# GivHome 4.2.3-beta.3
+# GivHome 4.2.3-beta.7
 
-Joint Export To can recover from a brief telemetry interruption near the recovery deadline. Recovery logs now show why an export paused, regained fresh readings or expired.
+Selected Charge and Export tiles now return reliably when re-enabled in settings.
 
-Local beta: steadier Gateway readings, with the existing AIO and Venus controls retained.
-
-Includes the previous Venus household-support recovery after Local API timeouts.
+Includes the beta.6 Venus battery-balancing improvements and earlier Gateway and export recovery improvements.

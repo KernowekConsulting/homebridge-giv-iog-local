@@ -29,3 +29,20 @@ test('Gateway publication is atomic across meter and battery groups',async()=>{c
 test('failed Gateway battery group cannot publish a new meter with old membership',async()=>{const {GatewayFeed}=require('../lib/marstek/gateway-feed');let now=10000,fail=false;const feed=new GatewayFeed({host:'sim',serial:'GW'},{now:()=>now,client:{readInputRegisters:async(base,count)=>{if(fail&&base===1800)throw Error('receive timed out');const values=Array(count).fill(0);if(base===1700)values[1]=1;if(base===1800)values[1]=70;return {inverterSerial:'GW',deviceAddress:17,transparentFunction:4,baseRegister:base,values};}}});await feed.tick();const before=feed.snapshot();now+=2000;fail=true;await assert.rejects(feed.tick());assert.equal(feed.snapshot().observedAtMs,before.observedAtMs);now+=5000;assert.throws(()=>feed.snapshot(),/stale/);});
 test('owned restoration reads outrank Gateway evidence; normal Giv-only options stay unchanged',()=>{const p=Object.create(GivHomeModbusPlatform.prototype);p.config={};p.deviceAddress=17;assert.equal(p.manualChargeClientOptions().givLeaseOptions,undefined);p.marstekAioSession={phase:'stopping'};assert.equal(p.manualChargeClientOptions().givLeaseOptions.priority,100);p.marstekAioSession.phase='preparing';assert.equal(p.manualChargeClientOptions().givLeaseOptions,undefined);});
 test('Gateway feed uses established whole-site IR1702 even while individual AIO readings lag',async()=>{const {GatewayFeed}=require('../lib/marstek/gateway-feed'),{SiteCoordinator}=require('../lib/marstek/site-coordinator');let now=10000;const feed=new GatewayFeed({host:'sim',serial:'GW'},{now:()=>now,client:{readInputRegisters:async(base,count)=>{const values=Array(count).fill(0);if(base===1700){values[1]=1;values[2]=65536-4000;}if(base===1616)values[0]=3675;if(base===1800){values[1]=70;values[16]=65536-296;}return {inverterSerial:'GW',deviceAddress:17,transparentFunction:4,baseRegister:base,values};}}});await feed.tick();const g=feed.snapshot();assert.equal(g.aioDischargeW,4000);assert.equal(g.individualAioDischargeW,296);assert.equal(g.aioPowerSource,'IR1702');const result=new SiteCoordinator().step({gateway:g,venus:{observedAtMs:now,socPercent:70,acDischargeW:690,acDirectionQualified:true},nowMs:now,intent:{mode:'export',target:47,deadlineMs:now+60000}});assert.equal(result.aioW,6000,'lagging individual AC must not be mistaken for outside generation');});
+test('joint export retries a pre-write connect timeout on the next fresh plan',async t=>{
+ const r=rig(t,{latency:0});
+ await r.ui.tiles.export.level.handleSetRequest(47);
+ await r.ui.tiles.export.on.handleSetRequest(true);
+ const read=r.p.readExportPrestate.bind(r.p);
+ let failures=1;
+ r.p.readExportPrestate=async(...args)=>{if(failures-->0)throw Error('connect timed out');return read(...args);};
+ const attempt=()=>r.aio.apply((t.mock.timers.tick(2000),r.observe()),r.sample,r.ui.state.intent);
+ assert.equal((await attempt()).status,'retrying');
+ assert.equal(r.aio.exportConfirmed(r.ui.state.intent),false);
+ assert.equal(r.writes.length,0);
+ assert.equal((await attempt()).status,'owned');
+ assert.equal(r.aio.exportConfirmed(r.ui.state.intent),true);
+ await r.ui.tiles.export.on.handleSetRequest(false);
+ await r.aio.tail;
+ assert.equal(r.registers[59],0);
+});

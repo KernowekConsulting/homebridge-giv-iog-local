@@ -4,7 +4,7 @@ const {SiteCoordinator}=require('../lib/marstek/site-coordinator');
 function sample(a=70,v=70){return {nowMs:10000,gateway:{observedAtMs:10000,onlineCount:1,units:[{socPercent:a}],gridExportW:0,aioDischargeW:1000},venus:{observedAtMs:10000,socPercent:v,acDischargeW:0,acDirectionQualified:true,identityQualified:true},context:{ecoEnabled:true,localApiTimed:true}};}
 function settle(p,s,n=12){let r;for(let i=0;i<n;i++){s.nowMs+=8000;s.gateway.observedAtMs=s.venus.observedAtMs=s.nowMs;r=p.step(s);s.venus.acDischargeW=r.venusW;s.gateway.aioDischargeW=1000-r.venusW;}return r;}
 test('equal SOC shares capacity rather than displacing the entire AIO output',()=>{const s=sample(),r=settle(new SiteCoordinator(),s);assert(Math.abs(r.venusW-275)<2);assert.equal(r.aioW,0);});
-test('observed 29/71 gap gives Venus a larger bounded contribution',()=>{const s=sample(29,71),r=settle(new SiteCoordinator({venusOutputW:2500,higherDischargeLimitConfirmed:true}),s);assert.equal(r.venusW,950);assert(r.ecoAllocation.correctionW>750);});
+test('observed 29/71 gap gives Venus a larger bounded contribution',()=>{const s=sample(29,71),r=settle(new SiteCoordinator({venusOutputW:2500,higherDischargeLimitConfirmed:true}),s);assert.equal(r.venusW,950);assert.equal(r.ecoAllocation.catchingUp,true);});
 for(const limit of [800,2500])for(const count of [1,2,3])test(`six hour house/PV/load-step model: ${count} AIO, ${limit}W Venus`,()=>{
  const p=new SiteCoordinator({venusOutputW:limit,higherDischargeLimitConfirmed:limit>800,aioReserve:5,venusReserve:5}),s=sample(65,95);s.gateway.units=Array.from({length:count},()=>({socPercent:65}));s.gateway.onlineCount=count;let energy=0,initialGap=30,minGap=30;
  for(let i=0;i<2700;i++){
@@ -154,4 +154,16 @@ test('operation evidence measures battery and grid energy separately and breaks 
  assert.equal(exportWindow.exportPricePence,22);
  assert.equal(exportWindow.maxRequestedDischargeW,300);
  assert.equal(exportWindow.grid.outWh,0);
+});
+
+test('fuller Venus carries steady demand up to the catch-up and device ceilings',()=>{
+ const {ecoAllocation}=require('../lib/marstek/eco-allocation');
+ const s=sample(36,55);
+ const plan=(load,limit)=>ecoAllocation({gateway:{...s.gateway,aioDischargeW:load},venus:s.venus,aioCapacityKwh:13.5,venusCapacityKwh:5.12,aioReserve:10,venusReserve:10,maxDischargeW:limit});
+ assert.equal(plan(1123,2500).targetW,1073);
+ assert.equal(plan(3000,2500).targetW,1980);
+ assert.equal(plan(3000,800).targetW,800);
+ s.venus.socPercent=38;
+ assert.equal(plan(1123,2500).catchingUp,false);
+ assert(Math.abs(plan(1123,2500).targetW-309)<2);
 });

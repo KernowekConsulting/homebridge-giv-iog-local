@@ -13,7 +13,7 @@ test('missing membership faults combined SOC and refuses an action',async t=>{co
 test('stale last observation queues the request without authorising power',async t=>{const {ui}=setup(t);ui.latest.at-=7000;await ui.tiles.charge.on.handleSetRequest(true);assert(ui.pending);assert.equal(ui.latest.result.aioW,0);assert.equal(ui.latest.result.venusW,0);assert.equal(ui.latest.result.reachable,false);assert.equal(ui.authority.allows(ui.token),false);});
 test('restart restores target but never arms interrupted command',async t=>{const first=setup(t);await first.ui.tiles.charge.level.handleSetRequest(85);await first.ui.tiles.charge.on.handleSetRequest(true);first.ui.stop();const next=setup(t,first.directory);assert.equal(next.ui.state.targets.charge,85);assert.equal(next.ui.state.intent,null);assert.equal(next.ui.authority.state.hold,'telemetry-stale');assert.equal(await next.ui.tiles.charge.on.handleGetRequest(),false);assert.equal(await next.ui.tiles.export.on.handleGetRequest(),false);assert.equal(JSON.parse(fs.readFileSync(path.join(first.directory,'givhome-site-preview','targets.json'))).intent,null);});
 test('disabling percentage preview removes only preview accessories',t=>{const {ui,removed}=setup(t);ui.stop();ui.config.marstekSitePreviewEnabled=false;ui.start();assert.equal(removed.length,3);assert.ok(removed.every(a=>a.context.siteOwner==='givhome-site-shadow-v1'));});
-test('preview runtime migration suppresses eight timed tiles without rewriting saved preferences',t=>{const {GivHomeModbusPlatform}=require('../index');const directory=fs.mkdtempSync(path.join(os.tmpdir(),'percentage-migration-'));const log=Object.assign(()=>{},{info(){},warn(){},debug(){},error(){}});const config={marstekSitePreviewEnabled:true,marstekGatewaySerial:'GW2412G068',marstekShadowBatteryId:'sim-venus',marstekDevices:[{id:'sim-venus',host:'127.0.0.1'}],enableTimedChargeTiles:true,enableTimedExportTiles:true,flightRecorderDir:directory};const platform=new GivHomeModbusPlatform(log,config,{hap,user:{storagePath:()=>directory},on(){}});t.after(()=>{clearInterval(platform.flightRecorder.timer);platform.marstek.stop();platform.sitePreview.stop();fs.rmSync(directory,{recursive:true,force:true});});assert.equal(platform.config.enableTimedChargeTiles,false);assert.equal(platform.config.enableTimedExportTiles,false);assert.equal(config.enableTimedChargeTiles,true);assert.equal(config.enableTimedExportTiles,true);});
+test('combined battery targets respect explicitly enabled timed tiles',t=>{const {GivHomeModbusPlatform}=require('../index');const directory=fs.mkdtempSync(path.join(os.tmpdir(),'percentage-migration-'));const log=Object.assign(()=>{},{info(){},warn(){},debug(){},error(){}});const config={marstekSitePreviewEnabled:true,marstekGatewaySerial:'GW2412G068',marstekShadowBatteryId:'sim-venus',marstekDevices:[{id:'sim-venus',host:'127.0.0.1'}],enableTimedChargeTiles:true,enableTimedExportTiles:true,flightRecorderDir:directory};const platform=new GivHomeModbusPlatform(log,config,{hap,user:{storagePath:()=>directory},on(){}});t.after(()=>{clearInterval(platform.flightRecorder.timer);platform.marstek.stop();platform.sitePreview.stop();fs.rmSync(directory,{recursive:true,force:true});});assert.equal(platform.config.enableTimedChargeTiles,true);assert.equal(platform.config.enableTimedExportTiles,true);assert.equal(config.enableTimedChargeTiles,true);assert.equal(config.enableTimedExportTiles,true);});
 test('held automatic target cannot be recorded as completed',t=>{const {ui,sample}=setup(t);ui.authority.hold('manual-cancel');const s=sample(),end=s.nowMs+60000;s.context={overnightEnabled:true,nightActive:true,nightTargetSoc:40,nightEndAtMs:end};assert.equal(ui.sample(s).complete,false);assert.equal(ui.authority.completed('night:'+end+':40',s.nowMs),false);});
 test('completed overnight target cannot block an explicit manual Charge target',async t=>{const {ui,sample}=setup(t);const s=sample(),end=s.nowMs+60000;ui.authority.complete('night:'+end+':40',end,s.nowMs);await ui.tiles.charge.on.handleSetRequest(true);s.context={overnightEnabled:true,nightActive:true,nightTargetSoc:40,nightEndAtMs:end};assert.equal(ui.sample(s).reason,'charge-budgeted');});
 test('editing the inactive Export target does not cancel an active Charge',async t=>{const {ui}=setup(t);await ui.tiles.charge.on.handleSetRequest(true);const token=ui.token;await ui.tiles.export.level.handleSetRequest(35);assert.equal(ui.state.intent.mode,'charge');assert.equal(ui.state.targets.export,35);assert.equal(ui.authority.allows(token),true);});
@@ -28,4 +28,38 @@ test('Combined SOC publishes changing native HomeKit values and notifications', 
  assert.deepEqual(events,[60,65,70]);
  assert.ok(level.props.perms.includes(hap.Perms.NOTIFY));
  assert.ok(!level.props.perms.includes(hap.Perms.PAIRED_WRITE));
+});
+
+// Exercise the production accessory reconciliation with the real HomeKit classes.
+test('timed Export tiles return after disable and re-enable with stable identities',()=>{
+ const {GivHomeModbusPlatform}=require('../index');
+ const registered=[],removed=[];
+ const platform=Object.create(GivHomeModbusPlatform.prototype);
+ Object.assign(platform,{name:'visibility-test',inverterSerial:'TEST',Service:hap.Service,Characteristic:hap.Characteristic,accessories:[],accessoryByUUID:new Map(),applianceCommandServices:new Map(),applianceControl:{features:{exportTiles:true}},log:{warn(){}},api:{hap,platformAccessory:hap.Accessory,registerPlatformAccessories(_p,_n,a){registered.push(...a);},unregisterPlatformAccessories(_p,_n,a){removed.push(...a);},updatePlatformAccessories(){}}});
+ // Homebridge adds context to platform accessories.
+ platform.api.platformAccessory=class extends hap.Accessory{constructor(n,u){super(n,u);this.context={};}};
+ platform.ensureApplianceCommandAccessories();
+ const ids=registered.map(a=>a.UUID);assert.equal(ids.length,4);
+ platform.applianceControl.features.exportTiles=false;platform.ensureApplianceCommandAccessories();
+ assert.equal(removed.length,4);assert.equal(platform.accessoryByUUID.size,0);
+ platform.applianceControl.features.exportTiles=true;platform.ensureApplianceCommandAccessories();
+ assert.deepEqual(registered.slice(4).map(a=>a.UUID),ids);
+ assert.equal(platform.accessoryByUUID.size,4);
+});
+test('percentage tiles return on a fresh launch after disabling removed their cache',t=>{
+ const first=setup(t);const ids=first.registered.map(a=>a.UUID);
+ first.ui.stop();first.ui.config.marstekSitePreviewEnabled=false;first.ui.start();
+ assert.deepEqual(first.removed.map(a=>a.UUID),ids);
+ const next=setup(t,first.directory);
+ assert.deepEqual(next.registered.map(a=>a.UUID),ids);
+});
+
+test('percentage tiles re-register after disable and re-enable in the same instance',t=>{
+ const {ui,registered,removed}=setup(t);const ids=registered.map(a=>a.UUID);
+ ui.stop();ui.config.marstekSitePreviewEnabled=false;ui.start();
+ assert.equal(ui.cached.size,0);assert.deepEqual(ui.tiles,{});
+ ui.start();assert.equal(removed.length,3);
+ ui.config.marstekSitePreviewEnabled=true;ui.start();
+ assert.deepEqual(registered.slice(3).map(a=>a.UUID),ids);
+ assert.equal(ui.cached.size,3);
 });

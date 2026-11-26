@@ -1,10 +1,16 @@
+# Changelog
+
+## 4.2.3-beta.7
+
+- Restore selected timed Charge and Export tiles with combined battery controls enabled.
+- Re-register percentage tiles after disabling and re-enabling.
+- Retain beta.6 Venus balancing, Gateway and export recovery improvements.
+
 # 4.2.3-beta.1
 
 - Steadier Gateway readings through connection reuse and heartbeat replies.
 - Keeps existing AIO communication, battery controls and continuity fallbacks.
 - Local testing only.
-
-# Changelog
 
 ## 4.2.2
 
